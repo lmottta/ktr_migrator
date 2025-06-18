@@ -10,6 +10,7 @@ import plotly.graph_objects as go
 import pandas as pd
 from datetime import datetime, timedelta
 from streamlit_autorefresh import st_autorefresh
+from loguru import logger
 
 # Adicionar o diretório raiz ao sys.path para importações corretas
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -368,6 +369,181 @@ def show_flows_as_table(flows):
                 st.rerun()
 
 
+def show_detailed_ktr_analysis(ktr_model):
+    """Mostra análise detalhada do fluxo KTR."""
+    st.markdown("---")
+    st.subheader("🔍 Análise Detalhada do Fluxo KTR")
+    
+    with st.spinner("🔍 Executando análise avançada..."):
+        try:
+            # Usar o PipelineAnalyzer para análise completa
+            analyzer = PipelineAnalyzer()
+            analysis_result = analyzer.analyze_pipeline(ktr_model)
+            
+            # Mostrar análise geral
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("🎯 Score de Complexidade", analysis_result.complexity_score)
+            with col2:
+                st.metric("⚡ Ganho de Performance", f"{analysis_result.estimated_performance_gain}%")
+            with col3:
+                st.metric("🔍 Padrões Detectados", len(analysis_result.patterns))
+            with col4:
+                st.metric("💡 Otimizações", len(analysis_result.optimizations))
+            
+            # Análise das etapas do fluxo
+            st.markdown("### 📋 Etapas do Fluxo")
+            
+            # Categorizar etapas
+            input_steps = [step for step in ktr_model.steps if step.is_input]
+            transform_steps = [step for step in ktr_model.steps if step.is_transform]
+            output_steps = [step for step in ktr_model.steps if step.is_output]
+            
+            # Explicação geral do fluxo
+            st.markdown("#### 🎯 Resumo do Fluxo")
+            flow_explanation = f"""
+            **{ktr_model.name}** é um pipeline de dados que:
+            
+            • **Extrai** dados de {len(input_steps)} fonte(s)
+            • **Transforma** usando {len(transform_steps)} etapa(s) de processamento
+            • **Carrega** em {len(output_steps)} destino(s)
+            
+            **Complexidade**: {'Alta' if analysis_result.complexity_score > 7 else 'Média' if analysis_result.complexity_score > 4 else 'Baixa'}
+            """
+            st.info(flow_explanation)
+            
+            # Detalhes das etapas por categoria
+            if input_steps:
+                with st.expander("📥 Etapas de Entrada", expanded=True):
+                    for step in input_steps:
+                        col1, col2 = st.columns([1, 3])
+                        with col1:
+                            st.write(f"**{step.name}**")
+                            st.caption(f"Tipo: {step.type.value}")
+                        with col2:
+                            explanation = get_step_explanation(step)
+                            st.write(explanation)
+            
+            if transform_steps:
+                with st.expander("🔄 Etapas de Transformação", expanded=True):
+                    for step in transform_steps:
+                        col1, col2 = st.columns([1, 3])
+                        with col1:
+                            st.write(f"**{step.name}**")
+                            st.caption(f"Tipo: {step.type.value}")
+                        with col2:
+                            explanation = get_step_explanation(step)
+                            st.write(explanation)
+            
+            if output_steps:
+                with st.expander("📤 Etapas de Saída", expanded=True):
+                    for step in output_steps:
+                        col1, col2 = st.columns([1, 3])
+                        with col1:
+                            st.write(f"**{step.name}**")
+                            st.caption(f"Tipo: {step.type.value}")
+                        with col2:
+                            explanation = get_step_explanation(step)
+                            st.write(explanation)
+            
+            # Padrões detectados
+            if analysis_result.patterns:
+                st.markdown("### 🎯 Padrões Detectados")
+                for pattern in analysis_result.patterns:
+                    with st.expander(f"🔍 {pattern.name} (Confiança: {pattern.confidence:.0%})"):
+                        st.write(pattern.description)
+                        if pattern.steps_involved:
+                            st.write("**Etapas envolvidas:**")
+                            for step_name in pattern.steps_involved:
+                                st.write(f"• {step_name}")
+            
+            # Sugestões de otimização
+            if analysis_result.optimizations:
+                st.markdown("### 💡 Sugestões de Otimização")
+                for opt in analysis_result.optimizations:
+                    impact_color = {"high": "🔴", "medium": "🟡", "low": "🟢"}
+                    color = impact_color.get(opt.impact, "🔵")
+                    
+                    with st.expander(f"{color} {opt.type} - Impacto {opt.impact.title()}"):
+                        st.write(opt.description)
+                        if opt.code_example:
+                            st.code(opt.code_example, language="python")
+            
+            # Métricas detalhadas
+            if analysis_result.metrics:
+                st.markdown("### 📊 Métricas Detalhadas")
+                
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.metric("Total de Etapas", analysis_result.metrics.get("total_steps", 0))
+                    st.metric("Etapas de Entrada", analysis_result.metrics.get("input_steps", 0))
+                    st.metric("Etapas de Transformação", analysis_result.metrics.get("transform_steps", 0))
+                    st.metric("Etapas de Saída", analysis_result.metrics.get("output_steps", 0))
+                
+                with col2:
+                    st.metric("Conexões Totais", analysis_result.metrics.get("total_connections", 0))
+                    st.metric("Profundidade do Grafo", analysis_result.metrics.get("graph_depth", 0))
+                    st.metric("Largura do Grafo", analysis_result.metrics.get("graph_width", 0))
+                    st.metric("Ciclos Detectados", analysis_result.metrics.get("cycles", 0))
+                    
+        except Exception as e:
+            st.error(f"❌ Erro na análise detalhada: {e}")
+            logger.error(f"Erro na análise detalhada: {e}")
+
+
+def get_step_explanation(step) -> str:
+    """Gera explicação para uma etapa específica."""
+    explanations = {
+        "TableInput": "📊 Lê dados de uma tabela no banco de dados",
+        "TextFileInput": "📄 Lê dados de um arquivo de texto (CSV, TXT, etc.)",
+        "ExcelInput": "📈 Lê dados de um arquivo Excel",
+        "Select values": "🔧 Seleciona e renomeia campos específicos",
+        "Filter rows": "🔍 Filtra registros baseado em condições",
+        "Sort rows": "📊 Ordena registros por campos específicos",
+        "Group by": "📊 Agrupa dados e calcula estatísticas",
+        "Calculator": "🧮 Calcula novos campos usando expressões",
+        "String operations": "🔤 Manipula strings (concatenar, substituir, etc.)",
+        "StringOperations": "🔤 Manipula strings (concatenar, substituir, etc.)",
+        "Value Mapper": "🗺️ Mapeia valores de entrada para valores de saída",
+        "Database join": "🔗 Junta dados de múltiplas fontes",
+        "Database lookup": "🔍 Busca dados em outra tabela",
+        "TableOutput": "💾 Grava dados em uma tabela do banco de dados",
+        "TextFileOutput": "📄 Grava dados em arquivo de texto",
+        "ExcelOutput": "📈 Grava dados em arquivo Excel",
+        "Insert/Update": "🔄 Insere ou atualiza registros no banco",
+        "Delete": "🗑️ Remove registros do banco de dados",
+        "Abort": "⛔ Para a execução do pipeline se condições forem atendidas",
+        "Dummy": "🔄 Etapa de passagem (não faz processamento)",
+    }
+    
+    step_type = step.type.value if hasattr(step.type, 'value') else str(step.type)
+    base_explanation = explanations.get(step_type, f"⚙️ Executa operação: {step_type}")
+    
+    # Adicionar informações específicas se disponíveis
+    additional_info = []
+    
+    # Verificar se há configurações específicas
+    if hasattr(step, 'configuration') and step.configuration:
+        config = step.configuration
+        
+        # Para inputs de arquivo
+        if 'filename' in config:
+            additional_info.append(f"Arquivo: {config['filename']}")
+        
+        # Para operações de banco
+        if 'table' in config:
+            additional_info.append(f"Tabela: {config['table']}")
+        
+        # Para filtros
+        if 'condition' in config:
+            additional_info.append(f"Condição: {config['condition']}")
+    
+    if additional_info:
+        base_explanation += f" ({', '.join(additional_info)})"
+    
+    return base_explanation
+
+
 def show_analytics():
     """Página de analytics com gráficos."""
     st.title("📊 Analytics & Insights")
@@ -499,6 +675,10 @@ def show_import_flow():
             with col3:
                 st.metric("Complexidade", "Média")  # Placeholder
 
+        # Botão para análise detalhada do fluxo
+        if st.button("🔍 Analisar Fluxo Detalhadamente", type="secondary", use_container_width=True):
+            show_detailed_ktr_analysis(ktr_model)
+
     except Exception as e:
         st.error(f"❌ Erro na análise do KTR: {e}")
         st.session_state.ktr_model = None
@@ -564,7 +744,6 @@ def show_import_flow():
                         flow_manager.delete_flow(new_flow.id)
                         if Path(new_flow.project_path).exists():
                             shutil.rmtree(new_flow.project_path)
-
 
 def show_monitor():
     """Página de monitoramento melhorada."""

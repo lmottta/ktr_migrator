@@ -1,7 +1,7 @@
 """
 Pipeline: localizacao_imovel
 Gerado automaticamente do KTR: localizacao_imovel.ktr
-Data: 2025-06-18 00:30:51
+Data: 2025-06-18 12:25:22
 
 Este arquivo foi gerado pelo KTR Migrator
 Autor: Engenheiro de Dados
