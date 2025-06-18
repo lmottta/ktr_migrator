@@ -1,0 +1,30 @@
+[
+    {
+        "id": "13df4ef8-9cb2-4bb8-9dd9-5edc29c48497",
+        "name": "localizacao_imovel_1",
+        "status": "Pronto",
+        "created_at": "2025-06-18T00:30:51.349556",
+        "updated_at": "2025-06-18T00:54:01.584216",
+        "project_path": "C:\\ktr_migrator\\ktr_platform\\flows\\13df4ef8-9cb2-4bb8-9dd9-5edc29c48497",
+        "last_run_at": "2025-06-18T00:54:01.584216",
+        "execution_status": "Falha",
+        "execution_logs": [
+            "[2025-06-18T00:54:00.555009] 🚀 Iniciando execução do fluxo...",
+            "[2025-06-18T00:54:00.562023] 📁 Executando: localizacao_imovel_pipeline.py",
+            "[2025-06-18T00:54:01.425892] \u001b[32m2025-06-18 00:54:01.424\u001b[0m | \u001b[1mINFO    \u001b[0m | \u001b[36m__main__\u001b[0m:\u001b[36msetup_logging\u001b[0m:\u001b[36m52\u001b[0m - \u001b[1m🚀 Iniciando pipeline: localizacao_imovel\u001b[0m",
+            "[2025-06-18T00:54:01.467107] \u001b[32m2025-06-18 00:54:01.465\u001b[0m | \u001b[1mINFO    \u001b[0m | \u001b[36m__main__\u001b[0m:\u001b[36msetup_connections\u001b[0m:\u001b[36m59\u001b[0m - \u001b[1m📡 Conexão configurada: local (POSTGRESQL)\u001b[0m",
+            "[2025-06-18T00:54:01.468090] \u001b[32m2025-06-18 00:54:01.467\u001b[0m | \u001b[1mINFO    \u001b[0m | \u001b[36m__main__\u001b[0m:\u001b[36msetup_connections\u001b[0m:\u001b[36m63\u001b[0m - \u001b[1m📡 Conexão configurada: PRODUCAO (POSTGRESQL)\u001b[0m",
+            "[2025-06-18T00:54:01.469500] \u001b[32m2025-06-18 00:54:01.467\u001b[0m | \u001b[1mINFO    \u001b[0m | \u001b[36m__main__\u001b[0m:\u001b[36mrun_pipeline\u001b[0m:\u001b[36m212\u001b[0m - \u001b[1m🎯 Executando pipeline localizacao_imovel\u001b[0m",
+            "[2025-06-18T00:54:01.469500] \u001b[32m2025-06-18 00:54:01.467\u001b[0m | \u001b[1mINFO    \u001b[0m | \u001b[36m__main__\u001b[0m:\u001b[36mextract_data\u001b[0m:\u001b[36m69\u001b[0m - \u001b[1m🔄 Iniciando extração de dados...\u001b[0m",
+            "[2025-06-18T00:54:01.475522] \u001b[32m2025-06-18 00:54:01.475\u001b[0m | \u001b[31m\u001b[1mERROR   \u001b[0m | \u001b[36m__main__\u001b[0m:\u001b[36mextract_data\u001b[0m:\u001b[36m95\u001b[0m - \u001b[31m\u001b[1m❌ Erro na extração: [Errno 22] Invalid argument: 'C:\\x08iserver-ce\\\\ktr\\\\GeoǓ104_Localizacao_imovel_CGDAI_Marco_25.xlsx'\u001b[0m",
+            "[2025-06-18T00:54:01.477495] \u001b[32m2025-06-18 00:54:01.475\u001b[0m | \u001b[31m\u001b[1mERROR   \u001b[0m | \u001b[36m__main__\u001b[0m:\u001b[36mrun_pipeline\u001b[0m:\u001b[36m254\u001b[0m - \u001b[31m\u001b[1m💥 Pipeline falhou: {'records_processed': 0, 'execution_time': 0, 'errors': 1, 'status': 'failed', 'error': \"[Errno 22] Invalid argument: 'C:\\\\x08iserver-ce\\\\\\\\ktr\\\\\\\\GeoǓ104_Localizacao_imovel_CGDAI_Marco_25.xlsx'\", 'total_execution_time': 0.008415, 'end_time': '2025-06-18T00:54:01.475522'}\u001b[0m",
+            "[2025-06-18T00:54:01.478605] \u001b[32m2025-06-18 00:54:01.476\u001b[0m | \u001b[34m\u001b[1mDEBUG   \u001b[0m | \u001b[36m__main__\u001b[0m:\u001b[36mrun_pipeline\u001b[0m:\u001b[36m261\u001b[0m - \u001b[34m\u001b[1m🔌 Conexão fechada: local\u001b[0m",
+            "[2025-06-18T00:54:01.479636] \u001b[32m2025-06-18 00:54:01.476\u001b[0m | \u001b[34m\u001b[1mDEBUG   \u001b[0m | \u001b[36m__main__\u001b[0m:\u001b[36mrun_pipeline\u001b[0m:\u001b[36m261\u001b[0m - \u001b[34m\u001b[1m🔌 Conexão fechada: PRODUCAO\u001b[0m",
+            "[2025-06-18T00:54:01.479636] ❌ Pipeline falhou: [Errno 22] Invalid argument: 'C:\\x08iserver-ce\\\\ktr\\\\GeoǓ104_Localizacao_imovel_CGDAI_Marco_25.xlsx'",
+            "[2025-06-18T00:54:01.586728] ❌ Execução falhou com código 1"
+        ],
+        "execution_start_time": "2025-06-18T00:54:00.481495",
+        "execution_end_time": "2025-06-18T00:54:01.584216",
+        "execution_duration": 1.102721
+    }
+]
