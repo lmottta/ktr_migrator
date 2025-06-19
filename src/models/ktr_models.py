@@ -67,7 +67,7 @@ class Hop:
 class Step:
     """Classe base para steps do Pentaho"""
     name: str
-    type: StepType
+    type: StepType = StepType.TABLE_INPUT  # Valor padrão temporário
     description: str = ""
     config: Dict[str, Any] = field(default_factory=dict)
     

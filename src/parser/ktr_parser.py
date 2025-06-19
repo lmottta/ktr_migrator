@@ -171,7 +171,6 @@ class KTRParser:
         
         return TableInputStep(
             name=name,
-            type=StepType.TABLE_INPUT,
             description=description,
             connection_name=connection_name,
             sql=sql,
@@ -197,7 +196,6 @@ class KTRParser:
         
         return TableOutputStep(
             name=name,
-            type=StepType.TABLE_OUTPUT,
             description=description,
             connection_name=connection_name,
             schema=schema,
@@ -248,7 +246,6 @@ class KTRParser:
         
         return ExcelInputStep(
             name=name,
-            type=StepType.EXCEL_INPUT,
             description=description,
             file_path=file_path,
             sheet_name=sheet_name,
@@ -273,7 +270,6 @@ class KTRParser:
         
         return StringOperationsStep(
             name=name,
-            type=StepType.STRING_OPERATIONS,
             description=description,
             operations=operations
         )

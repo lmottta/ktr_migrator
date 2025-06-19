@@ -12,12 +12,12 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
 setup(
     name="ktr-migrator",
     version="1.0.0",
-    author="Engenheiro de Dados",
-    author_email="engenheiro@example.com",
+    author="Leonardo A. Mota",
+    author_email="dev.lamota@gmail.com",
     description="Ferramenta para migração de pipelines Pentaho KTR para Python",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/example/ktr-migrator",
+    url="https://github.com/lmottta/ktr_migrator",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 4 - Beta",

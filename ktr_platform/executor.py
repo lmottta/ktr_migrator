@@ -3,12 +3,60 @@ import threading
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Callable
+from typing import Optional, Callable, List
 import sys
 import os
+import re
 
 from flow_manager import FlowManager
 
+def _stream_reader(stream, on_log: Callable[[str], None], stderr_lines: List[str], flow_id: str, flow_manager: FlowManager):
+    """Lê um stream linha por linha, analisa erros em tempo real e chama o callback."""
+    error_stage_patterns = {
+        'extração': [
+            r'❌ Erro na extração',
+            r'FileNotFoundError',
+            r'read_excel.*error',
+            r'extraction.*failed',
+            r'extract_data.*error'
+        ],
+        'transformação': [
+            r'❌ Erro na transformação',
+            r'transform_data.*error',
+            r'KeyError.*column',
+            r'transformation.*failed'
+        ],
+        'carregamento': [
+            r'❌ Erro na carga',
+            r'load_data.*error',
+            r'database.*error',
+            r'to_sql.*error',
+            r'connection.*failed'
+        ]
+    }
+    
+    for line in iter(stream.readline, ''):
+        if line:
+            clean_line = line.strip()
+            on_log(clean_line)
+            
+            # Capturar stderr separadamente
+            if stderr_lines is not None:
+                stderr_lines.append(clean_line)
+            
+            # Analisar se é um erro e identificar a etapa
+            if any(keyword in clean_line.lower() for keyword in ['error', 'exception', 'traceback', 'failed']):
+                stage = 'desconhecido'
+                for stage_name, patterns in error_stage_patterns.items():
+                    if any(re.search(pattern, clean_line, re.IGNORECASE) for pattern in patterns):
+                        stage = stage_name
+                        break
+                
+                # Salvar erro imediatamente com identificação da etapa
+                error_msg = f"[{stage.upper()}] {clean_line}"
+                flow_manager.update_execution_error(flow_id, error_msg)
+                
+    stream.close()
 
 class FlowExecutor:
     """Executa fluxos Python de forma assíncrona e monitora sua execução."""
@@ -52,7 +100,7 @@ class FlowExecutor:
         return True
     
     def _run_flow_in_thread(self, flow_id: str, on_log: Optional[Callable[[str], None]] = None):
-        """Executa o fluxo em uma thread separada."""
+        """Executa o fluxo em uma thread separada, capturando stdout e stderr com análise em tempo real."""
         flow = self.flow_manager.get_flow(flow_id)
         if not flow:
             return
@@ -61,7 +109,6 @@ class FlowExecutor:
         start_time_str = start_time.isoformat()
         
         try:
-            # Atualizar status para "Executando"
             self.flow_manager.update_execution_status(
                 flow_id, 
                 "Executando",
@@ -69,37 +116,76 @@ class FlowExecutor:
             )
             self._log_and_callback(flow_id, "🚀 Iniciando execução do fluxo...", on_log)
             
-            # Encontrar o arquivo principal do pipeline
             project_path = Path(flow.project_path)
             pipeline_file = self._find_pipeline_file(project_path)
             
             if not pipeline_file:
-                raise Exception("Arquivo de pipeline não encontrado")
+                raise FileNotFoundError("Arquivo de pipeline não encontrado")
                 
             self._log_and_callback(flow_id, f"📁 Executando: {pipeline_file.name}", on_log)
             
-            # Executar o pipeline
+            # Adicionar variáveis de ambiente para melhor rastreamento
+            env = os.environ.copy()
+            env['PYTHONUNBUFFERED'] = '1'  # Forçar output sem buffer
+            env['PYTHONFAULTHANDLER'] = '1'  # Ativar handler de falhas
+            
             process = subprocess.Popen(
                 [sys.executable, str(pipeline_file)],
                 cwd=str(project_path),
                 stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT,
+                stderr=subprocess.PIPE,
                 text=True,
-                bufsize=1,
-                universal_newlines=True
+                bufsize=0,  # Sem buffer para captura em tempo real
+                universal_newlines=True,
+                env=env
             )
             
             self._running_processes[flow_id] = process
             
-            # Capturar output em tempo real
-            for line in iter(process.stdout.readline, ''):
-                if line.strip():
-                    self._log_and_callback(flow_id, line.strip(), on_log)
-                    
-            # Esperar processo terminar
-            process.wait()
+            stderr_output = []
+
+            # Threads para capturar stdout e stderr em tempo real com análise
+            stdout_thread = threading.Thread(
+                target=_stream_reader,
+                args=(
+                    process.stdout, 
+                    lambda line: self._log_and_callback(flow_id, line, on_log), 
+                    None,
+                    flow_id,
+                    self.flow_manager
+                ),
+                daemon=True
+            )
+            stderr_thread = threading.Thread(
+                target=_stream_reader,
+                args=(
+                    process.stderr, 
+                    lambda line: self._log_and_callback(flow_id, f"[ERRO] {line}", on_log), 
+                    stderr_output,
+                    flow_id,
+                    self.flow_manager
+                ),
+                daemon=True
+            )
             
-            # Remover da lista de processos rodando
+            stdout_thread.start()
+            stderr_thread.start()
+            
+            # Monitorar processo em tempo real
+            while process.poll() is None:
+                time.sleep(0.5)  # Verificar a cada 500ms
+                
+                # Se já temos erro identificado, interromper
+                current_flow = self.flow_manager.get_flow(flow_id)
+                if current_flow and current_flow.error_message:
+                    self._log_and_callback(flow_id, "💥 Erro detectado, interrompendo execução...", on_log)
+                    process.terminate()
+                    break
+
+            # Esperar as threads de leitura finalizarem
+            stdout_thread.join(timeout=5)
+            stderr_thread.join(timeout=5)
+            
             if flow_id in self._running_processes:
                 del self._running_processes[flow_id]
             
@@ -115,17 +201,26 @@ class FlowExecutor:
                 )
                 self._log_and_callback(flow_id, f"✅ Execução concluída com sucesso em {duration:.2f}s", on_log)
             else:
+                error_summary = f"❌ Execução falhou com código {process.returncode}"
                 self.flow_manager.update_execution_status(
                     flow_id,
                     "Falha",
                     end_time=end_time.isoformat(),
                     duration=duration
                 )
-                self._log_and_callback(flow_id, f"❌ Execução falhou com código {process.returncode}", on_log)
+                self._log_and_callback(flow_id, error_summary, on_log)
                 
-        except Exception as e:
+                # Se não temos erro específico ainda, salvar o stderr completo
+                current_flow = self.flow_manager.get_flow(flow_id)
+                if not current_flow.error_message and stderr_output:
+                    full_error_message = "\n".join(stderr_output)
+                    self.flow_manager.update_execution_error(flow_id, f"[GERAL] {full_error_message}")
+
+        except (Exception, FileNotFoundError) as e:
             end_time = datetime.now()
             duration = (end_time - start_time).total_seconds()
+            
+            error_message_str = f"💥 Erro inesperado na execução: {str(e)}"
             
             self.flow_manager.update_execution_status(
                 flow_id,
@@ -133,9 +228,9 @@ class FlowExecutor:
                 end_time=end_time.isoformat(),
                 duration=duration
             )
-            self._log_and_callback(flow_id, f"💥 Erro na execução: {str(e)}", on_log)
+            self._log_and_callback(flow_id, error_message_str, on_log)
+            self.flow_manager.update_execution_error(flow_id, f"[EXECUTOR] {str(e)}")
             
-            # Remover da lista se estiver lá
             if flow_id in self._running_processes:
                 del self._running_processes[flow_id]
     

@@ -24,6 +24,7 @@ class Flow:
     execution_start_time: Optional[str] = None
     execution_end_time: Optional[str] = None
     execution_duration: Optional[float] = None
+    error_message: Optional[str] = None
     
     def __post_init__(self):
         if self.project_path is None:
@@ -43,6 +44,7 @@ class Flow:
             "execution_start_time": self.execution_start_time,
             "execution_end_time": self.execution_end_time,
             "execution_duration": self.execution_duration,
+            "error_message": self.error_message,
         }
 
     @staticmethod
@@ -123,6 +125,19 @@ class FlowManager:
                 
             self._save_flows()
 
+    def update_execution_error(self, flow_id: str, error_message: str):
+        """Armazena a mensagem de erro detalhada da execução, acumulando múltiplos erros."""
+        flow = self.get_flow(flow_id)
+        if flow:
+            # Se já existe uma mensagem de erro, acumular em vez de sobrescrever
+            if flow.error_message:
+                # Evitar duplicações da mesma mensagem
+                if error_message not in flow.error_message:
+                    flow.error_message += f"\n\n---\n\n{error_message}"
+            else:
+                flow.error_message = error_message
+            self._save_flows()
+
     def add_execution_log(self, flow_id: str, log_message: str):
         """Adiciona uma mensagem de log para a execução."""
         flow = self.get_flow(flow_id)
@@ -132,10 +147,11 @@ class FlowManager:
             self._save_flows()
 
     def clear_execution_logs(self, flow_id: str):
-        """Limpa os logs de execução."""
+        """Limpa os logs de execução e a mensagem de erro."""
         flow = self.get_flow(flow_id)
         if flow:
             flow.execution_logs = []
+            flow.error_message = None
             self._save_flows()
 
     def delete_flow(self, flow_id: str):

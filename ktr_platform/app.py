@@ -11,6 +11,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from streamlit_autorefresh import st_autorefresh
 from loguru import logger
+import re
 
 # Adicionar o diretório raiz ao sys.path para importações corretas
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -189,6 +190,15 @@ def show_dashboard():
     with col5:
         st.metric("❌ Falhas", failed_flows)
     
+    # Banner de execução em tempo real
+    if running_flows > 0:
+        st.markdown(f"""
+        <div style="background: linear-gradient(90deg, #ff6b35 0%, #f7931e 100%); padding: 1rem; border-radius: 10px; margin: 1rem 0; text-align: center; color: white; animation: pulse 2s infinite;">
+            🔄 <strong>EXECUÇÃO EM TEMPO REAL</strong> - {running_flows} fluxo(s) executando
+            <br><small>Monitore o progresso clicando no botão "📊 Monitorar" de cada fluxo</small>
+        </div>
+        """, unsafe_allow_html=True)
+    
     st.markdown("---")
     
     # Controles avançados
@@ -252,6 +262,10 @@ def show_dashboard():
         show_flows_as_cards(filtered_flows)
     else:
         show_flows_as_table(filtered_flows)
+    
+    # Auto-refresh para fluxos em execução
+    if any(executor.is_flow_running(flow.id) for flow in all_flows):
+        st_autorefresh(interval=3000, key="dashboard_auto_refresh")  # Refresh a cada 3 segundos
 
 
 def show_flows_as_cards(flows):
@@ -291,7 +305,7 @@ def show_flows_as_cards(flows):
                 """, unsafe_allow_html=True)
                 
                 # Botões de ação
-                cols_actions = st.columns(4)
+                cols_actions = st.columns(5)
                 
                 with cols_actions[0]:
                     if is_running:
@@ -305,16 +319,21 @@ def show_flows_as_cards(flows):
                             st.rerun()
                 
                 with cols_actions[1]:
+                    if st.button("📝", key=f"edit_card_{flow.id}", help="Editar Código"):
+                        change_view('edit_code', flow.id)
+                        st.rerun()
+                
+                with cols_actions[2]:
                     if st.button("📊", key=f"monitor_card_{flow.id}", help="Monitorar"):
                         change_view('monitor', flow.id)
                         st.rerun()
                 
-                with cols_actions[2]:
+                with cols_actions[3]:
                     if st.button("✏️", key=f"rename_card_{flow.id}", help="Renomear"):
                         change_view('rename', flow.id)
                         st.rerun()
                 
-                with cols_actions[3]:
+                with cols_actions[4]:
                     if st.button("🗑️", key=f"delete_card_{flow.id}", help="Excluir"):
                         change_view('delete', flow.id)
                         st.rerun()
@@ -746,7 +765,7 @@ def show_import_flow():
                             shutil.rmtree(new_flow.project_path)
 
 def show_monitor():
-    """Página de monitoramento melhorada."""
+    """Página de monitoramento melhorada com progresso visual em tempo real."""
     flow_id = st.session_state.selected_flow_id
     flow = flow_manager.get_flow(flow_id)
     
@@ -762,24 +781,201 @@ def show_monitor():
     
     st.markdown("---")
     
+    # CSS para progresso visual
+    st.markdown("""
+    <style>
+    .monitor-container {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        padding: 1.5rem;
+        border-radius: 15px;
+        color: white;
+        margin-bottom: 2rem;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+    }
+    .progress-step {
+        background: #f8f9fa;
+        padding: 1rem;
+        border-radius: 10px;
+        margin-bottom: 1rem;
+        border-left: 4px solid #007bff;
+        color: #333;
+    }
+    .step-running {
+        border-left-color: #ffc107;
+        animation: pulse 2s infinite;
+    }
+    .step-success {
+        border-left-color: #28a745;
+    }
+    .step-error {
+        border-left-color: #dc3545;
+    }
+    @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.7); }
+        70% { box-shadow: 0 0 0 10px rgba(255, 193, 7, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(255, 193, 7, 0); }
+    }
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    .spinner {
+        display: inline-block;
+        animation: spin 1s linear infinite;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
     # Status em tempo real
     is_running = executor.is_flow_running(flow_id)
     
+    # Container principal de monitoramento
+    st.markdown(f"""
+    <div class="monitor-container">
+        <h2>🎯 {flow.name}</h2>
+        <p>Monitoramento em tempo real da execução do pipeline</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # SISTEMA DE AUTO-REFRESH MELHORADO
+    current_time = datetime.now()
+    
+    # Criar um placeholder para atualizações dinâmicas
+    refresh_placeholder = st.empty()
+    
+    # Sistema de refresh baseado em condições
+    refresh_needed = False
+    refresh_interval = 3000  # 3 segundos padrão
+    
     if is_running:
-        st.markdown("🔴 **EXECUTANDO EM TEMPO REAL**")
+        refresh_needed = True
+        refresh_interval = 500  # 0.5 segundos durante execução
+        refresh_placeholder.success(f"🔄 EXECUTANDO - Próxima atualização em 0.5s - {current_time.strftime('%H:%M:%S')}")
+    elif flow.error_message:
+        refresh_needed = True
+        refresh_interval = 2000  # 2 segundos para erros
+        refresh_placeholder.error(f"💥 ERRO DETECTADO - Última atualização: {current_time.strftime('%H:%M:%S')}")
+    elif flow.execution_status in ["Falha", "Erro"]:
+        refresh_needed = True
+        refresh_interval = 5000  # 5 segundos para status de falha
+        refresh_placeholder.warning(f"⚠️ STATUS DE FALHA - Última atualização: {current_time.strftime('%H:%M:%S')}")
+    else:
+        refresh_placeholder.info(f"📊 Monitoramento ativo - {current_time.strftime('%H:%M:%S')}")
+    
+    # Exibir mensagem de erro detalhada, se houver
+    if flow.error_message:
+        # Extrair a etapa do erro da mensagem
+        stage_match = re.search(r'\[([^\]]+)\]', flow.error_message)
+        stage = stage_match.group(1) if stage_match else "DESCONHECIDO"
+        
+        # Cores específicas por etapa
+        stage_colors = {
+            "EXTRAÇÃO": "🔴",
+            "TRANSFORMAÇÃO": "🟠", 
+            "CARREGAMENTO": "🟡",
+            "EXECUTOR": "🔵",
+            "GERAL": "⚫"
+        }
+        
+        stage_icon = stage_colors.get(stage, "❌")
+        
+        st.error(f"### {stage_icon} Falha na Etapa: {stage}")
+        
+        # Limpar a mensagem de erro dos prefixos para exibição
+        clean_error = re.sub(r'^\[[^\]]+\]\s*', '', flow.error_message)
+        
+        # Exibir com formatting específico
+        if "Traceback" in clean_error or "File " in clean_error:
+            st.code(clean_error, language='python')
+        else:
+            st.code(clean_error, language='bash')
+            
+        # Adicionar dicas de resolução baseadas na etapa
+        if stage == "EXTRAÇÃO":
+            with st.expander("💡 Dicas para Resolução"):
+                st.write("""
+                **Problemas comuns na extração:**
+                - Arquivo não encontrado: Verifique se o caminho está correto
+                - Erro de permissão: Verifique se o arquivo está sendo usado por outro processo
+                - Formato inválido: Verifique se o arquivo Excel não está corrompido
+                - Planilha não encontrada: Verifique o nome da aba no arquivo Excel
+                """)
+        elif stage == "TRANSFORMAÇÃO":
+            with st.expander("💡 Dicas para Resolução"):
+                st.write("""
+                **Problemas comuns na transformação:**
+                - Campo não encontrado: Verifique se as colunas existem no DataFrame
+                - Tipo de dados inválido: Verifique se os tipos estão corretos
+                - Valores nulos: Implemente tratamento para valores ausentes
+                """)
+        elif stage == "CARREGAMENTO":
+            with st.expander("💡 Dicas para Resolução"):
+                st.write("""
+                **Problemas comuns no carregamento:**
+                - Erro de conexão: Verifique credenciais e conectividade
+                - Tabela não existe: Verifique se a tabela foi criada
+                - Permissões insuficientes: Verifique as permissões do usuário
+                - Constraint violada: Verifique duplicatas ou campos obrigatórios
+                """)
+
+    # Análise dos logs para determinar progresso
+    progress_steps = analyze_execution_progress(flow)
+    
+    # Barra de progresso principal
+    total_steps = len(progress_steps)
+    completed_steps = len([s for s in progress_steps if s['status'] == 'completed'])
+    progress_percentage = (completed_steps / total_steps) * 100 if total_steps > 0 else 0
+    
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("📊 Progresso Geral", f"{progress_percentage:.1f}%")
+    with col2:
+        st.metric("✅ Etapas Concluídas", f"{completed_steps}/{total_steps}")
+    with col3:
+        status_emoji = "🔄" if is_running else ("✅" if flow.execution_status == "Sucesso" else "❌")
+        st.metric("Status", f"{status_emoji} {flow.execution_status}")
+    
+    # Barra de progresso visual
+    st.progress(progress_percentage / 100)
+    
+    # Timeline das etapas
+    st.subheader("🔄 Timeline de Execução")
+    
+    for i, step in enumerate(progress_steps):
+        step_class = "progress-step"
+        if step['status'] == 'running':
+            step_class += " step-running"
+        elif step['status'] == 'completed':
+            step_class += " step-success"
+        elif step['status'] == 'error':
+            step_class += " step-error"
+            
+        icon = "🔄" if step['status'] == 'running' else ("✅" if step['status'] == 'completed' else ("❌" if step['status'] == 'error' else "⏳"))
+        
+        spinner_html = '<span class="spinner">🔄</span>' if step['status'] == 'running' else icon
+        
+        st.markdown(f"""
+        <div class="{step_class}">
+            <strong>{spinner_html} Etapa {i+1}: {step['name']}</strong><br>
+            <small>{step['description']}</small>
+            {f"<br><small>⏱️ {step['timestamp']}</small>" if step['timestamp'] else ""}
+        </div>
+        """, unsafe_allow_html=True)
     
     # Métricas detalhadas
+    st.markdown("---")
     col1, col2, col3, col4, col5 = st.columns(5)
     
     with col1:
         status_color = "🟢" if flow.execution_status == "Sucesso" else "🔴" if flow.execution_status in ["Falha", "Erro"] else "🟡"
-        st.metric("Status", f"{status_color} {flow.execution_status}")
+        st.metric("Status Detalhado", f"{status_color} {flow.execution_status}")
     
     with col2:
         if flow.execution_duration:
             st.metric("Duração", f"{flow.execution_duration:.2f}s")
         else:
-            st.metric("Duração", "-")
+            current_duration = calculate_current_duration(flow, is_running)
+            st.metric("Duração", current_duration)
     
     with col3:
         if flow.execution_start_time:
@@ -793,7 +989,7 @@ def show_monitor():
             end_time = pd.to_datetime(flow.execution_end_time)
             st.metric("Finalizado", end_time.strftime("%H:%M:%S"))
         else:
-            st.metric("Finalizado", "-" if not is_running else "Executando...")
+            st.metric("Finalizado", "-" if not is_running else "🔄 Executando...")
     
     with col5:
         logs_count = len(flow.execution_logs)
@@ -801,7 +997,7 @@ def show_monitor():
     
     # Controles de execução
     st.markdown("---")
-    col1, col2, col3 = st.columns(3)
+    col1, col2, col3, col4 = st.columns(4)
     
     with col1:
         if is_running:
@@ -829,31 +1025,131 @@ def show_monitor():
                     "text/plain"
                 )
     
-    # Logs em tempo real
+    with col4:
+        auto_refresh = st.checkbox("🔄 Auto-refresh", value=True)
+        if auto_refresh and refresh_needed:
+            st_autorefresh(interval=refresh_interval, key=f"monitor_refresh_{flow_id}")
+
+    # Logs em tempo real com análise
     st.markdown("---")
-    st.subheader("📋 Logs de Execução")
+    st.subheader("📊 Logs de Execução")
+    
+    # Status de refresh
+    if auto_refresh:
+        st.caption(f"🔄 Auto-refresh ativo - Última atualização: {datetime.now().strftime('%H:%M:%S')}")
     
     if flow.execution_logs:
         # Container para logs com altura fixa e scroll
         logs_container = st.container()
         
         with logs_container:
-            # Mostrar apenas os últimos 100 logs para performance
-            recent_logs = flow.execution_logs[-100:]
+            # Mostrar apenas os últimos 50 logs para performance
+            recent_logs = flow.execution_logs[-50:]
             
             for log_entry in recent_logs:
                 # Colorir logs baseado no conteúdo
-                if "ERROR" in log_entry or "❌" in log_entry:
+                if "ERROR" in log_entry or "❌" in log_entry or "Erro" in log_entry:
                     st.error(log_entry)
                 elif "WARNING" in log_entry or "⚠️" in log_entry:
                     st.warning(log_entry)
-                elif "SUCCESS" in log_entry or "✅" in log_entry:
+                elif "SUCCESS" in log_entry or "✅" in log_entry or "Sucesso" in log_entry:
                     st.success(log_entry)
+                elif "INFO" in log_entry or "📡" in log_entry or "🚀" in log_entry or "🎯" in log_entry:
+                    st.info(log_entry)
                 else:
                     st.text(log_entry)
     else:
         st.info("📝 Nenhum log disponível. Execute o fluxo para gerar logs.")
 
+def analyze_execution_progress(flow):
+    """Analisa os logs para determinar o progresso das etapas."""
+    steps = [
+        {"name": "Inicialização", "description": "Preparando ambiente de execução", "status": "pending", "timestamp": None},
+        {"name": "Configuração", "description": "Carregando configurações e conexões", "status": "pending", "timestamp": None},
+        {"name": "Extração", "description": "Extraindo dados das fontes", "status": "pending", "timestamp": None},
+        {"name": "Transformação", "description": "Aplicando regras de negócio", "status": "pending", "timestamp": None},
+        {"name": "Carregamento", "description": "Salvando dados processados", "status": "pending", "timestamp": None},
+        {"name": "Finalização", "description": "Limpeza e relatórios", "status": "pending", "timestamp": None}
+    ]
+    
+    if not flow.execution_logs:
+        return steps
+    
+    current_step = 0
+    
+    for log in flow.execution_logs:
+        # Mapear logs para etapas
+        if "Iniciando execução" in log or "Iniciando pipeline" in log:
+            if current_step < len(steps):
+                steps[current_step]['status'] = 'completed'
+                steps[current_step]['timestamp'] = extract_timestamp(log)
+                current_step = 1
+                
+        elif "Conexão configurada" in log or "configurações" in log.lower():
+            if current_step <= 1:
+                if current_step == 1:
+                    steps[current_step]['status'] = 'completed'
+                    steps[current_step]['timestamp'] = extract_timestamp(log)
+                current_step = 2
+                
+        elif "extração" in log.lower() or "Iniciando extração" in log:
+            if current_step <= 2:
+                if current_step == 2:
+                    steps[current_step]['status'] = 'running' if "Iniciando" in log else 'completed'
+                    steps[current_step]['timestamp'] = extract_timestamp(log)
+                if "Iniciando" not in log:
+                    current_step = 3
+                    
+        elif "transformação" in log.lower() or "transform" in log.lower():
+            if current_step <= 3:
+                if current_step == 3:
+                    steps[current_step]['status'] = 'running' if "Iniciando" in log else 'completed'
+                    steps[current_step]['timestamp'] = extract_timestamp(log)
+                if "Iniciando" not in log:
+                    current_step = 4
+                    
+        elif "carregamento" in log.lower() or "loading" in log.lower() or "salvando" in log.lower():
+            if current_step <= 4:
+                if current_step == 4:
+                    steps[current_step]['status'] = 'running' if "Iniciando" in log else 'completed'
+                    steps[current_step]['timestamp'] = extract_timestamp(log)
+                if "Iniciando" not in log:
+                    current_step = 5
+                    
+        elif "Pipeline concluído" in log or "Execução concluída" in log:
+            steps[5]['status'] = 'completed'
+            steps[5]['timestamp'] = extract_timestamp(log)
+            
+        elif "ERROR" in log or "❌" in log or "Erro" in log or "falhou" in log:
+            # Marcar etapa atual como erro
+            if current_step < len(steps):
+                steps[current_step]['status'] = 'error'
+                steps[current_step]['timestamp'] = extract_timestamp(log)
+    
+    return steps
+
+def extract_timestamp(log_entry):
+    """Extrai timestamp do log."""
+    try:
+        if "[" in log_entry and "]" in log_entry:
+            timestamp_str = log_entry.split("]")[0].replace("[", "")
+            return timestamp_str.split("T")[1][:8] if "T" in timestamp_str else timestamp_str
+    except:
+        pass
+    return None
+
+def calculate_current_duration(flow, is_running):
+    """Calcula duração atual se ainda estiver executando."""
+    if not is_running or not flow.execution_start_time:
+        return "-"
+    
+    try:
+        start_time = pd.to_datetime(flow.execution_start_time)
+        current_time = pd.Timestamp.now()
+        duration = (current_time - start_time).total_seconds()
+        return f"{duration:.1f}s"
+    except:
+        return "-"
 
 def show_rename():
     """Página de renomeação melhorada."""
@@ -961,6 +1257,423 @@ def show_delete():
         if st.button("❌ Cancelar", use_container_width=True):
             change_view('dashboard')
             st.rerun()
+
+
+def show_edit_code():
+    """Página para editar código do fluxo com informações específicas sobre cada arquivo."""
+    flow_id = st.session_state.selected_flow_id
+    flow = flow_manager.get_flow(flow_id)
+    
+    if not flow:
+        st.error("Fluxo não encontrado!")
+        return
+    
+    st.title(f"📝 Editor de Código: {flow.name}")
+    
+    if st.button("⬅️ Voltar ao Dashboard"):
+        change_view('dashboard')
+        st.rerun()
+    
+    st.markdown("---")
+    
+    # Verificar se o projeto existe
+    project_path = Path(flow.project_path)
+    if not project_path.exists():
+        st.error("❌ Projeto não encontrado! Verifique se o fluxo foi importado corretamente.")
+        return
+
+    # Definir tipos de arquivos com suas funções específicas
+    file_types_info = {
+        "Pipeline Principal": {
+            "icon": "🔄",
+            "description": "Arquivo principal que contém a lógica de ETL do pipeline",
+            "impact": "Alterações aqui afetam diretamente o processamento de dados",
+            "etapas": ["Extração de dados", "Transformações", "Carga de dados"],
+            "pattern": f"{flow.name.lower().replace(' ', '_')}_pipeline.py",
+            "folder": "src/pipelines/"
+        },
+        "Configurações": {
+            "icon": "⚙️", 
+            "description": "Configurações de conexões de banco, variáveis de ambiente e parâmetros",
+            "impact": "Alterações aqui afetam conexões e comportamento global do pipeline",
+            "etapas": ["Configuração de DB", "Variáveis de ambiente", "Parâmetros gerais"],
+            "pattern": "settings.py",
+            "folder": "config/"
+        },
+        "Testes Unitários": {
+            "icon": "🧪",
+            "description": "Testes automatizados para validar o funcionamento do pipeline",
+            "impact": "Alterações aqui afetam a validação e qualidade do código",
+            "etapas": ["Testes de conexão", "Validação de dados", "Testes de transformação"],
+            "pattern": f"test_{flow.name.lower().replace(' ', '_')}_pipeline.py",
+            "folder": "tests/"
+        },
+        "Extratores": {
+            "icon": "📥",
+            "description": "Módulos responsáveis pela extração de dados de fontes",
+            "impact": "Alterações aqui afetam como os dados são extraídos das origens",
+            "etapas": ["Conexão com fonte", "Consultas SQL", "Validação de entrada"],
+            "pattern": "*.py",
+            "folder": "src/extractors/"
+        },
+        "Transformadores": {
+            "icon": "🔧",
+            "description": "Módulos para transformação e limpeza de dados",
+            "impact": "Alterações aqui afetam como os dados são processados e transformados",
+            "etapas": ["Limpeza de dados", "Aplicação de regras", "Validações"],
+            "pattern": "*.py", 
+            "folder": "src/transformers/"
+        },
+        "Carregadores": {
+            "icon": "📤",
+            "description": "Módulos responsáveis pela carga de dados no destino",
+            "impact": "Alterações aqui afetam como os dados são carregados no destino",
+            "etapas": ["Conexão de destino", "Inserção de dados", "Validação de carga"],
+            "pattern": "*.py",
+            "folder": "src/loaders/"
+        },
+        "Utilitários": {
+            "icon": "🛠️",
+            "description": "Funções auxiliares e utilitários compartilhados",
+            "impact": "Alterações aqui afetam funcionalidades compartilhadas entre módulos",
+            "etapas": ["Funções auxiliares", "Helpers", "Validadores"],
+            "pattern": "*.py",
+            "folder": "src/utils/"
+        }
+    }
+    
+    # Encontrar arquivos por categoria
+    categorized_files = {}
+    
+    for category, info in file_types_info.items():
+        folder_path = project_path / info["folder"]
+        files_found = []
+        
+        if folder_path.exists():
+            if info["pattern"] == "*.py":
+                files_found = list(folder_path.glob("*.py"))
+            else:
+                specific_file = folder_path / info["pattern"]
+                if specific_file.exists():
+                    files_found = [specific_file]
+        
+        if files_found:
+            categorized_files[category] = {
+                "info": info,
+                "files": files_found
+            }
+    
+    if not categorized_files:
+        st.warning("⚠️ Nenhum arquivo Python encontrado no projeto.")
+        return
+    
+    # Seletor de categoria e arquivo
+    st.subheader("📂 Selecionar Arquivo para Editar")
+    
+    # Primeiro, selecionar categoria
+    categories = list(categorized_files.keys())
+    selected_category = st.selectbox(
+        "1️⃣ Escolha a categoria:",
+        options=categories,
+        format_func=lambda x: f"{categorized_files[x]['info']['icon']} {x}",
+        index=0
+    )
+    
+    # Mostrar informações da categoria selecionada
+    if selected_category:
+        category_info = categorized_files[selected_category]["info"]
+        
+        with st.expander(f"ℹ️ Sobre {selected_category}", expanded=True):
+            st.markdown(f"**Função:** {category_info['description']}")
+            st.markdown(f"**Impacto das alterações:** {category_info['impact']}")
+            
+            if category_info['etapas']:
+                st.markdown("**Etapas que afeta:**")
+                for etapa in category_info['etapas']:
+                    st.markdown(f"  • {etapa}")
+        
+        # Segundo, selecionar arquivo específico da categoria
+        available_files = categorized_files[selected_category]["files"]
+        
+        if len(available_files) > 1:
+            file_options = {}
+            for file_path in available_files:
+                relative_path = file_path.relative_to(project_path)
+                file_options[str(relative_path)] = str(file_path)
+            
+            selected_file_display = st.selectbox(
+                "2️⃣ Escolha o arquivo específico:",
+                options=list(file_options.keys())
+            )
+            selected_file_path = file_options[selected_file_display]
+        else:
+            selected_file_path = str(available_files[0])
+            selected_file_display = available_files[0].relative_to(project_path)
+    
+    if not selected_file_path:
+        st.error("Arquivo não encontrado!")
+        return
+    
+    try:
+        # Ler conteúdo do arquivo
+        with open(selected_file_path, 'r', encoding='utf-8') as f:
+            original_content = f.read()
+        
+        # Informações detalhadas do arquivo
+        st.markdown("---")
+        st.subheader(f"✏️ Editando: {selected_file_display}")
+        
+        # Métricas do arquivo
+        col1, col2, col3, col4 = st.columns(4)
+        with col1:
+            file_size = len(original_content.encode('utf-8'))
+            st.metric("📏 Tamanho", f"{file_size:,} bytes")
+        with col2:
+            line_count = len(original_content.splitlines())
+            st.metric("📄 Linhas", f"{line_count:,}")
+        with col3:
+            st.metric("🐍 Tipo", "Python")
+        with col4:
+            # Calcular complexidade básica (imports, funções, classes)
+            imports = len([line for line in original_content.splitlines() if line.strip().startswith(('import ', 'from '))])
+            functions = len([line for line in original_content.splitlines() if line.strip().startswith('def ')])
+            classes = len([line for line in original_content.splitlines() if line.strip().startswith('class ')])
+            complexity = imports + functions * 2 + classes * 3
+            st.metric("🧠 Complexidade", complexity)
+        
+        # Editor de código com melhor interface
+        st.markdown("### 💻 Editor de Código")
+        
+        # Dicas específicas por tipo de arquivo
+        if selected_category == "Pipeline Principal":
+            st.info("💡 **Dica:** Este é o coração do seu pipeline. Altere com cuidado as funções de extração, transformação e carga.")
+        elif selected_category == "Configurações":
+            st.warning("⚠️ **Atenção:** Mudanças aqui afetam todas as operações. Certifique-se de que as configurações de conexão estão corretas.")
+        elif selected_category == "Testes Unitários":
+            st.success("✅ **Boa prática:** Sempre execute os testes após fazer alterações para garantir que tudo funciona.")
+        
+        # Text area para edição com altura maior
+        edited_content = st.text_area(
+            "Código Python:",
+            value=original_content,
+            height=600,
+            help="💡 Use Ctrl+A para selecionar tudo, Ctrl+Z para desfazer, Ctrl+S para salvar (apenas no navegador)"
+        )
+        
+        # Verificar se houve mudanças
+        has_changes = edited_content != original_content
+        
+        if has_changes:
+            st.info("💡 Você fez alterações no código!")
+            
+            # Análise básica das mudanças
+            original_lines = original_content.splitlines()
+            edited_lines = edited_content.splitlines()
+            
+            lines_added = len(edited_lines) - len(original_lines)
+            if lines_added > 0:
+                st.success(f"➕ {lines_added} linhas adicionadas")
+            elif lines_added < 0:
+                st.warning(f"➖ {abs(lines_added)} linhas removidas")
+        
+        # Botões de ação principais
+        st.markdown("---")
+        st.subheader("💾 Ações de Arquivo")
+        
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            if st.button("💾 Salvar Alterações", type="primary", disabled=not has_changes):
+                try:
+                    # Verificar permissões de escrita
+                    file_path = Path(selected_file_path)
+                    if not file_path.parent.exists():
+                        file_path.parent.mkdir(parents=True, exist_ok=True)
+                    
+                    # Fazer backup do arquivo original com timestamp
+                    import datetime
+                    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+                    backup_path = f"{selected_file_path}.backup_{timestamp}"
+                    
+                    # Criar backup
+                    with open(backup_path, 'w', encoding='utf-8', newline='') as f:
+                        f.write(original_content)
+                    
+                    # Salvar o novo conteúdo
+                    with open(selected_file_path, 'w', encoding='utf-8', newline='') as f:
+                        f.write(edited_content)
+                    
+                    st.success("✅ Arquivo salvo com sucesso!")
+                    st.info(f"📁 Backup criado: {Path(backup_path).name}")
+                    
+                    # Mostrar estatísticas da operação
+                    bytes_saved = len(edited_content.encode('utf-8'))
+                    st.metric("📊 Dados salvos", f"{bytes_saved:,} bytes")
+                    
+                    time.sleep(1.5)
+                    st.rerun()
+                    
+                except PermissionError:
+                    st.error("❌ Erro de permissão! Verifique se o arquivo não está sendo usado por outro programa.")
+                except UnicodeError:
+                    st.error("❌ Erro de codificação! Verifique se o código contém caracteres especiais válidos.")
+                except Exception as e:
+                    st.error(f"❌ Erro ao salvar arquivo: {type(e).__name__}: {e}")
+                    st.code(f"Caminho: {selected_file_path}")
+        
+        with col2:
+            if st.button("🔄 Recarregar Original"):
+                st.info("🔄 Recarregando conteúdo original...")
+                time.sleep(0.5)
+                st.rerun()
+        
+        with col3:
+            if st.button("📋 Copiar Código"):
+                # Implementar BEP (notificação especial) para código copiado
+                st.markdown("### 🚨 BEP - CÓDIGO COPIADO")
+                st.markdown("---")
+                
+                # Informações do BEP
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.markdown("**📄 Arquivo:** " + str(selected_file_display))
+                    st.markdown("**📁 Categoria:** " + selected_category)
+                    st.markdown("**📏 Linhas:** " + str(len(edited_content.splitlines())))
+                
+                with col_b:
+                    import datetime
+                    timestamp = datetime.datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                    st.markdown("**🕐 Timestamp:** " + timestamp)
+                    st.markdown("**👤 Usuário:** Sistema")
+                    st.markdown("**🔗 Flow ID:** " + flow_id)
+                
+                st.markdown("**📋 Código para Cópia:**")
+                st.code(edited_content, language="python")
+                
+                st.success("✅ **BEP Gerado!** Use Ctrl+A no código acima, depois Ctrl+C para copiar")
+                st.info("💡 Este BEP registra que o código foi acessado para cópia conforme procedimentos de auditoria")
+        
+        with col4:
+            # Verificar se existem backups
+            backup_files = list(Path(selected_file_path).parent.glob(f"{Path(selected_file_path).name}.backup_*"))
+            if backup_files:
+                if st.button("↩️ Restaurar Backup"):
+                    # Selecionar o backup mais recente
+                    latest_backup = max(backup_files, key=os.path.getctime)
+                    
+                    try:
+                        with open(latest_backup, 'r', encoding='utf-8') as f:
+                            backup_content = f.read()
+                        
+                        with open(selected_file_path, 'w', encoding='utf-8', newline='') as f:
+                            f.write(backup_content)
+                        
+                        st.success(f"✅ Backup restaurado: {latest_backup.name}")
+                        time.sleep(1)
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"❌ Erro ao restaurar backup: {e}")
+        
+        # Validação do código
+        if has_changes:
+            st.markdown("---")
+            st.subheader("🔍 Validação e Análise")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("**🐍 Sintaxe Python:**")
+                try:
+                    compile(edited_content, selected_file_path, 'exec')
+                    st.success("✅ Sintaxe válida!")
+                except SyntaxError as e:
+                    st.error(f"❌ Erro de sintaxe na linha {e.lineno}")
+                    if e.text:
+                        st.code(f"Linha {e.lineno}: {e.text.strip()}")
+                    st.error(f"Erro: {e.msg}")
+                except Exception as e:
+                    st.warning(f"⚠️ Aviso na validação: {e}")
+            
+            with col2:
+                st.markdown("**📊 Análise de Mudanças:**")
+                
+                # Comparar imports
+                original_imports = len([line for line in original_content.splitlines() if line.strip().startswith(('import ', 'from '))])
+                edited_imports = len([line for line in edited_content.splitlines() if line.strip().startswith(('import ', 'from '))])
+                
+                if edited_imports != original_imports:
+                    diff_imports = edited_imports - original_imports
+                    emoji = "➕" if diff_imports > 0 else "➖"
+                    st.info(f"{emoji} {abs(diff_imports)} imports alterados")
+                
+                # Comparar funções
+                original_functions = len([line for line in original_content.splitlines() if line.strip().startswith('def ')])
+                edited_functions = len([line for line in edited_content.splitlines() if line.strip().startswith('def ')])
+                
+                if edited_functions != original_functions:
+                    diff_functions = edited_functions - original_functions
+                    emoji = "➕" if diff_functions > 0 else "➖"
+                    st.info(f"{emoji} {abs(diff_functions)} funções alteradas")
+            
+            # Mostrar diff das mudanças
+            with st.expander("👀 Ver Diferenças Detalhadas"):
+                col1, col2 = st.columns(2)
+                with col1:
+                    st.markdown("**📄 Antes:**")
+                    preview_original = original_content[:2000] + "\n..." if len(original_content) > 2000 else original_content
+                    st.code(preview_original, language="python")
+                with col2:
+                    st.markdown("**📝 Depois:**")
+                    preview_edited = edited_content[:2000] + "\n..." if len(edited_content) > 2000 else edited_content
+                    st.code(preview_edited, language="python")
+        
+        # Ações adicionais específicas por categoria
+        st.markdown("---")
+        st.subheader("🛠️ Ações Específicas")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.button("🧪 Testar Código"):
+                if has_changes:
+                    st.warning("⚠️ Salve as alterações antes de testar!")
+                else:
+                    if selected_category == "Testes Unitários":
+                        st.info("🧪 Executando testes unitários...")
+                        # Aqui você pode integrar com pytest ou unittest
+                        st.code(f"python -m pytest {selected_file_path}")
+                    else:
+                        st.info("🚀 Iniciando teste do pipeline...")
+                        executor.execute_flow(flow.id)
+                        change_view('monitor', flow.id)
+                        st.rerun()
+        
+        with col2:
+            if st.button("📁 Abrir Pasta"):
+                folder_path = Path(selected_file_path).parent
+                st.code(f"📂 Pasta: {folder_path}")
+                st.info("💡 Copie o caminho acima para abrir no explorador")
+        
+        with col3:
+            if st.button("📋 Listar Arquivos"):
+                st.markdown("**📁 Arquivos da categoria:**")
+                category_files = categorized_files[selected_category]["files"]
+                for file_path in category_files:
+                    relative = file_path.relative_to(project_path)
+                    size = file_path.stat().st_size
+                    st.write(f"📄 {relative} ({size:,} bytes)")
+    
+    except FileNotFoundError:
+        st.error(f"❌ Arquivo não encontrado: {selected_file_path}")
+    except PermissionError:
+        st.error(f"❌ Sem permissão para acessar: {selected_file_path}")
+    except UnicodeDecodeError:
+        st.error(f"❌ Erro de codificação no arquivo: {selected_file_path}")
+        st.info("💡 O arquivo pode conter caracteres especiais ou estar corrompido")
+    except Exception as e:
+        st.error(f"❌ Erro inesperado ao ler arquivo: {type(e).__name__}: {e}")
+        st.code(f"Arquivo: {selected_file_path}")
 
 
 def show_schedules():
@@ -1749,6 +2462,8 @@ elif st.session_state.view == 'schedules':
     show_schedules()
 elif st.session_state.view == 'monitor':
     show_monitor()
+elif st.session_state.view == 'edit_code':
+    show_edit_code()
 elif st.session_state.view == 'rename':
     show_rename()
 elif st.session_state.view == 'delete':

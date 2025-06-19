@@ -1,0 +1,2 @@
+from .table_input_documento_extractor import TableinputdocumentoPipelineExtractor
+from .table_input_documento_2_extractor import Tableinputdocumento2PipelineExtractor

@@ -1,0 +1,2 @@
+from .string_operations_transformer import StringoperationsPipelineTransformer
+from .string_operations_2_transformer import Stringoperations2PipelineTransformer
