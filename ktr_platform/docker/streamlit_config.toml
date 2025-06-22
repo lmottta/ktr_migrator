@@ -1,0 +1,52 @@
+[server]
+# Configurações do servidor
+port = 8501
+address = "0.0.0.0"
+headless = true
+runOnSave = false
+allowRunOnSave = false
+fileWatcherType = "none"
+
+# Configurações de upload
+maxUploadSize = 200
+maxMessageSize = 200
+
+# Configurações de CORS
+enableCORS = false
+enableXsrfProtection = false
+
+[browser]
+# Configurações do navegador
+gatherUsageStats = false
+serverAddress = "0.0.0.0"
+serverPort = 8501
+
+[theme]
+# Tema da aplicação
+primaryColor = "#FF6B6B"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F0F2F6"
+textColor = "#262730"
+font = "sans serif"
+
+[logger]
+# Configurações de log
+level = "info"
+messageFormat = "%(asctime)s %(message)s"
+
+[client]
+# Configurações do cliente
+showErrorDetails = false
+toolbarMode = "minimal"
+
+[global]
+# Configurações globais
+developmentMode = false
+suppressDeprecationWarnings = true
+showWarningOnDirectExecution = false
+
+[runner]
+# Configurações do runner
+magicEnabled = true
+installTracer = false
+fixMatplotlib = true 

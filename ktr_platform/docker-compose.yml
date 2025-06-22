@@ -1,0 +1,239 @@
+# Docker Compose para KTR Platform
+# Desenvolvido por: Engenheiro de Dados Senior
+# Data: 2025-06-19
+
+services:
+  # Aplicação principal KTR Platform
+  ktr-platform:
+    build:
+      context: ..
+      dockerfile: ktr_platform/Dockerfile
+      args:
+        - PYTHONUNBUFFERED=1
+    image: ktr-platform:latest
+    container_name: ktr-platform-app
+    restart: unless-stopped
+    ports:
+      - "${KTR_PORT:-8501}:8501"
+    environment:
+      # Configurações da aplicação
+      - PYTHONUNBUFFERED=1
+      - PYTHONDONTWRITEBYTECODE=1
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      
+      # Configurações do Streamlit
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+      - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+      - STREAMLIT_SERVER_HEADLESS=true
+      
+      # Configurações de banco (se necessário)
+      - DATABASE_HOST=postgres-db
+      - DATABASE_PORT=5432
+      - DATABASE_NAME=${DB_NAME:-ktr_platform}
+      - DATABASE_USER=${DB_USER:-ktr_user}
+      - DATABASE_PASSWORD=${DB_PASSWORD:-ktr_secure_pass}
+      
+      # Configurações de rede
+      - VIRTUAL_HOST=${KTR_DOMAIN:-localhost}
+      - VIRTUAL_PORT=8501
+    volumes:
+      # Dados persistentes
+      - ktr_data:/app/data
+      - ktr_logs:/app/logs
+      - ktr_flows:/app/flows
+      
+      # Configurações customizadas (opcional)
+      - ./config:/app/config:ro
+      
+      # Para desenvolvimento (comentar em produção)
+      # - .:/app:ro
+    networks:
+      - ktr-network
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8501/_stcore/health || curl -f http://localhost:8501/healthz || exit 1"]
+      interval: 30s
+      timeout: 15s
+      retries: 5
+      start_period: 60s
+    labels:
+      - "com.ktr-platform.service=main-app"
+      - "com.ktr-platform.version=1.0"
+
+  # Banco de dados PostgreSQL
+  postgres-db:
+    image: postgres:15-alpine
+    container_name: ktr-platform-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${DB_NAME:-ktr_platform}
+      - POSTGRES_USER=${DB_USER:-ktr_user}
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-ktr_secure_pass}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=C --lc-ctype=C
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    networks:
+      - ktr-network
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-ktr_user} -d ${DB_NAME:-ktr_platform}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      - "com.ktr-platform.service=database"
+
+  # Redis para cache e sessões (opcional)
+  redis-cache:
+    image: redis:7-alpine
+    container_name: ktr-platform-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-redis_secure_pass}
+    volumes:
+      - redis_data:/data
+    networks:
+      - ktr-network
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "--no-auth-warning", "-a", "${REDIS_PASSWORD:-redis_secure_pass}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    labels:
+      - "com.ktr-platform.service=cache"
+
+  # Nginx para proxy reverso (produção)
+  nginx-proxy:
+    image: nginx:alpine
+    container_name: ktr-platform-nginx
+    restart: unless-stopped
+    ports:
+      - "${NGINX_HTTP_PORT:-80}:80"
+      - "${NGINX_HTTPS_PORT:-443}:443"
+    volumes:
+      - ./docker/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./docker/ssl:/etc/nginx/ssl:ro
+      - nginx_logs:/var/log/nginx
+    networks:
+      - ktr-network
+    depends_on:
+      - ktr-platform
+    labels:
+      - "com.ktr-platform.service=proxy"
+    profiles:
+      - production
+
+  # Monitoramento com Prometheus (opcional)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: ktr-platform-prometheus
+    restart: unless-stopped
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    networks:
+      - ktr-network
+    labels:
+      - "com.ktr-platform.service=monitoring"
+    profiles:
+      - monitoring
+
+  # Grafana para dashboards (opcional)
+  grafana:
+    image: grafana/grafana:latest
+    container_name: ktr-platform-grafana
+    restart: unless-stopped
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD:-admin}
+      - GF_INSTALL_PLUGINS=grafana-clock-panel,grafana-simple-json-datasource
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/dashboards:/etc/grafana/provisioning/dashboards:ro
+      - ./docker/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+    networks:
+      - ktr-network
+    depends_on:
+      - prometheus
+    labels:
+      - "com.ktr-platform.service=dashboard"
+    profiles:
+      - monitoring
+
+# Definição de redes
+networks:
+  ktr-network:
+    driver: bridge
+    name: ktr-platform-network
+    labels:
+      - "com.ktr-platform.network=main"
+
+# Definição de volumes
+volumes:
+  # Dados da aplicação
+  ktr_data:
+    driver: local
+    name: ktr-platform-data
+    labels:
+      - "com.ktr-platform.volume=app-data"
+  
+  ktr_logs:
+    driver: local
+    name: ktr-platform-logs
+    labels:
+      - "com.ktr-platform.volume=app-logs"
+  
+  ktr_flows:
+    driver: local
+    name: ktr-platform-flows
+    labels:
+      - "com.ktr-platform.volume=app-flows"
+  
+  # Dados do banco
+  postgres_data:
+    driver: local
+    name: ktr-platform-postgres
+    labels:
+      - "com.ktr-platform.volume=database"
+  
+  # Cache Redis
+  redis_data:
+    driver: local
+    name: ktr-platform-redis
+    labels:
+      - "com.ktr-platform.volume=cache"
+  
+  # Logs do Nginx
+  nginx_logs:
+    driver: local
+    name: ktr-platform-nginx-logs
+    labels:
+      - "com.ktr-platform.volume=proxy-logs"
+  
+  # Dados de monitoramento
+  prometheus_data:
+    driver: local
+    name: ktr-platform-prometheus
+    labels:
+      - "com.ktr-platform.volume=monitoring"
+  
+  grafana_data:
+    driver: local
+    name: ktr-platform-grafana
+    labels:
+      - "com.ktr-platform.volume=dashboard" 

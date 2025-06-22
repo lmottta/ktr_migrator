@@ -1,0 +1,33 @@
+# Configuração Prometheus para KTR Platform
+# Desenvolvido por: Engenheiro de Dados Senior
+# Data: 2025-06-19
+
+global:
+  scrape_interval: 15s # Intervalo padrão para coletar métricas
+  evaluation_interval: 15s # Intervalo para avaliar regras
+
+# Regras de alerta (opcional, pode ser em arquivo separado)
+rule_files:
+  # - "alert.rules.yml"
+
+# Configuração de scraping
+scrape_configs:
+  # Coleta de métricas do próprio Prometheus
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Coleta de métricas de um possível cadvisor (para métricas de containers)
+  # - job_name: 'cadvisor'
+  #   static_configs:
+  #     - targets: ['cadvisor:8080']
+
+  # Coleta de métricas de um possível node-exporter (para métricas do host)
+  # - job_name: 'node-exporter'
+  #   static_configs:
+  #     - targets: ['node-exporter:9100']
+
+  # Adicione aqui outros serviços para monitorar
+  # - job_name: 'ktr-platform-app'
+  #   static_configs:
+  #     - targets: ['ktr-platform:8501'] # Ajuste a porta se a aplicação expor métricas 

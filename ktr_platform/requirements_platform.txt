@@ -1,0 +1,19 @@
+# Dependências da Plataforma KTR Pro
+streamlit>=1.28.0
+plotly>=5.17.0
+pandas>=2.0.0
+lxml>=4.9.0
+xmltodict>=0.13.0
+jinja2>=3.1.0
+loguru>=0.7.0
+streamlit-autorefresh>=0.1.0
+schedule>=1.2.0
+
+# Dependências para execução de pipelines
+subprocess32; sys_platform == "linux"
+psutil>=5.9.0
+
+# Dependências opcionais para conectores de banco
+psycopg2-binary>=2.9.0
+pymysql>=1.0.0
+pyodbc>=4.0.0 
