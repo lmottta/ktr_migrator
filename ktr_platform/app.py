@@ -96,8 +96,6 @@ def change_view(view_name, flow_id=None):
 
 # --- Sidebar de Navegação ---
 with st.sidebar:
-    st.image("https://via.placeholder.com/200x80/1e3c72/ffffff?text=KTR+Platform", width=200)
-    
     st.markdown("### 🎛️ Painel de Controle")
     
     if st.button("🏠 Dashboard", use_container_width=True):
@@ -106,10 +104,6 @@ with st.sidebar:
     
     if st.button("➕ Importar Fluxo", use_container_width=True):
         change_view('import_flow')
-        st.rerun()
-    
-    if st.button("📊 Analytics", use_container_width=True):
-        change_view('analytics')
         st.rerun()
     
     if st.button("⏰ Agendamentos", use_container_width=True):
@@ -124,12 +118,7 @@ with st.sidebar:
     if st.button("🔄 Atualizar Agora", use_container_width=True):
         st.rerun()
     
-    # Status do Scheduler
-    scheduler_status = "🟢 Ativo" if scheduler.running else "🔴 Inativo"
-    st.metric("Status do Scheduler", scheduler_status)
-    
     # Próximos agendamentos
-    st.markdown("---")
     st.markdown("### ⏰ Próximas Execuções")
     
     next_runs = scheduler.get_next_runs(3)
@@ -139,56 +128,62 @@ with st.sidebar:
             st.caption(f"   {run['next_run_str']}")
     else:
         st.info("Nenhum agendamento ativo")
-    
-    # Estatísticas gerais
-    st.markdown("---")
-    st.markdown("### 📈 Status Rápido")
-    
+
+# --- Funções de UI ---
+
+def show_global_header():
+    """Header global com métricas principais visível em todas as páginas."""
     all_flows = flow_manager.get_all_flows()
+    all_schedules = scheduler.get_all_schedules()
+    
     total_flows = len(all_flows)
     running_flows = len([f for f in all_flows if executor.is_flow_running(f.id)])
     successful_flows = len([f for f in all_flows if f.execution_status == "Sucesso"])
-    total_schedules = len(scheduler.get_all_schedules())
+    failed_flows = len([f for f in all_flows if f.execution_status in ["Falha", "Erro"]])
+    total_schedules = len(all_schedules)
+    scheduler_status = "🟢 Ativo" if scheduler.running else "🔴 Parado"
     
-    st.metric("Total de Fluxos", total_flows)
-    st.metric("Em Execução", running_flows)
-    st.metric("Sucessos", successful_flows)
-    st.metric("Agendamentos", total_schedules)
-
-# --- Funções de UI ---
+    st.markdown("""
+    <div style="
+        background: linear-gradient(90deg, #1e3c72 0%, #2a5298 100%);
+        padding: 1rem 2rem;
+        border-radius: 10px;
+        margin-bottom: 2rem;
+        color: white;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    ">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
+            <h2 style="margin: 0; color: white;">🚀 KTR Platform Pro - Status Global</h2>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    # Métricas em colunas
+    col1, col2, col3, col4, col5, col6 = st.columns(6)
+    
+    with col1:
+        st.metric("📁 Total de Fluxos", total_flows)
+    with col2:
+        st.metric("⚡ Em Execução", running_flows, delta=f"+{running_flows}" if running_flows > 0 else None)
+    with col3:
+        st.metric("✅ Sucessos", successful_flows)
+    with col4:
+        st.metric("❌ Falhas", failed_flows, delta=f"+{failed_flows}" if failed_flows > 0 else None)
+    with col5:
+        st.metric("⏰ Agendamentos", total_schedules)
+    with col6:
+        st.metric("🤖 Scheduler", scheduler_status)
+    
+    st.markdown("---")
 
 def show_dashboard():
     """Dashboard principal melhorado."""
     
-    # Header principal
-    st.markdown("""
-    <div class="main-header">
-        <h1>🚀 KTR Platform Pro - Central de Jobs</h1>
-        <p>Gerencie, execute e monitore seus fluxos de dados migrados do Pentaho</p>
-    </div>
-    """, unsafe_allow_html=True)
+    # Header global com métricas
+    show_global_header()
     
     all_flows = flow_manager.get_all_flows()
-    
-    # Métricas principais
-    col1, col2, col3, col4, col5 = st.columns(5)
-    
-    total_flows = len(all_flows)
     running_flows = len([f for f in all_flows if executor.is_flow_running(f.id)])
-    ready_flows = len([f for f in all_flows if f.status == "Pronto"])
-    successful_flows = len([f for f in all_flows if f.execution_status == "Sucesso"])
-    failed_flows = len([f for f in all_flows if f.execution_status in ["Falha", "Erro"]])
-    
-    with col1:
-        st.metric("🗂️ Total", total_flows)
-    with col2:
-        st.metric("▶️ Executando", running_flows, delta=None)
-    with col3:
-        st.metric("✅ Prontos", ready_flows)
-    with col4:
-        st.metric("🎯 Sucessos", successful_flows)
-    with col5:
-        st.metric("❌ Falhas", failed_flows)
     
     # Banner de execução em tempo real
     if running_flows > 0:
@@ -563,82 +558,10 @@ def get_step_explanation(step) -> str:
     return base_explanation
 
 
-def show_analytics():
-    """Página de analytics com gráficos."""
-    st.title("📊 Analytics & Insights")
-    
-    all_flows = flow_manager.get_all_flows()
-    
-    if not all_flows:
-        st.info("Nenhum fluxo disponível para análise.")
-        return
-    
-    # Métricas de desempenho
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Gráfico de status
-        status_counts = {}
-        for flow in all_flows:
-            status = flow.execution_status
-            status_counts[status] = status_counts.get(status, 0) + 1
-        
-        fig_status = px.pie(
-            values=list(status_counts.values()),
-            names=list(status_counts.keys()),
-            title="Distribuição de Status de Execução"
-        )
-        st.plotly_chart(fig_status, use_container_width=True)
-    
-    with col2:
-        # Gráfico de durações
-        durations = [f.execution_duration for f in all_flows if f.execution_duration]
-        names = [f.name for f in all_flows if f.execution_duration]
-        
-        if durations:
-            fig_duration = px.bar(
-                x=names,
-                y=durations,
-                title="Duração das Últimas Execuções (segundos)",
-                labels={'x': 'Fluxos', 'y': 'Duração (s)'}
-            )
-            fig_duration.update_xaxes(tickangle=45)
-            st.plotly_chart(fig_duration, use_container_width=True)
-        else:
-            st.info("Nenhuma execução finalizada para análise de duração.")
-    
-    # Timeline de execuções
-    st.markdown("### 📈 Timeline de Execuções")
-    
-    executions = []
-    for flow in all_flows:
-        if flow.execution_start_time and flow.execution_end_time:
-            executions.append({
-                'Fluxo': flow.name,
-                'Início': pd.to_datetime(flow.execution_start_time),
-                'Fim': pd.to_datetime(flow.execution_end_time),
-                'Status': flow.execution_status
-            })
-    
-    if executions:
-        df_exec = pd.DataFrame(executions)
-        
-        # Gráfico de timeline
-        fig_timeline = px.timeline(
-            df_exec,
-            x_start="Início",
-            x_end="Fim",
-            y="Fluxo",
-            color="Status",
-            title="Timeline das Execuções"
-        )
-        st.plotly_chart(fig_timeline, use_container_width=True)
-    else:
-        st.info("Nenhuma execução finalizada para timeline.")
-
 
 def show_import_flow():
     """Página de importação melhorada."""
+    show_global_header()
     st.title("➕ Importar Novo Fluxo")
     st.markdown("Faça upload do seu arquivo KTR do Pentaho e converta automaticamente para Python")
     
@@ -766,6 +689,8 @@ def show_import_flow():
 
 def show_monitor():
     """Página de monitoramento melhorada com progresso visual em tempo real."""
+    show_global_header()
+    
     flow_id = st.session_state.selected_flow_id
     flow = flow_manager.get_flow(flow_id)
     
@@ -1678,6 +1603,7 @@ def show_edit_code():
 
 def show_schedules():
     """Página de gerenciamento de agendamentos."""
+    show_global_header()
     st.title("⏰ Gerenciamento de Agendamentos")
     
     if st.button("⬅️ Voltar ao Dashboard"):
@@ -2451,13 +2377,13 @@ def show_next_executions():
         st.success("✅ Todos os agendamentos estão ativos e dentro do prazo.")
 
 
+
+
 # --- Roteador Principal ---
 if st.session_state.view == 'dashboard':
     show_dashboard()
 elif st.session_state.view == 'import_flow':
     show_import_flow()
-elif st.session_state.view == 'analytics':
-    show_analytics()
 elif st.session_state.view == 'schedules':
     show_schedules()
 elif st.session_state.view == 'monitor':

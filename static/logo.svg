@@ -1,0 +1,52 @@
+<svg width="200" height="80" viewBox="0 0 200 80" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#1e3c72;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2a5298;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="iconGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#4CAF50;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#2196F3;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background -->
+  <rect width="200" height="80" rx="8" fill="url(#bgGradient)"/>
+  
+  <!-- Icon Container -->
+  <circle cx="30" cy="40" r="18" fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+  
+  <!-- Data Flow Icon -->
+  <g transform="translate(21, 31)">
+    <!-- Database -->
+    <ellipse cx="4" cy="4" rx="3" ry="2" fill="#4CAF50"/>
+    <rect x="1" y="4" width="6" height="4" fill="#4CAF50"/>
+    <ellipse cx="4" cy="8" rx="3" ry="2" fill="#4CAF50"/>
+    
+    <!-- Arrow -->
+    <path d="M 8 6 L 12 6 M 10 4 L 12 6 L 10 8" stroke="#FFF" stroke-width="1.5" fill="none"/>
+    
+    <!-- Processing -->
+    <rect x="13" y="3" width="6" height="6" rx="1" fill="url(#iconGradient)"/>
+    <circle cx="16" cy="6" r="1" fill="#FFF"/>
+  </g>
+  
+  <!-- Text -->
+  <text x="55" y="28" font-family="Arial, sans-serif" font-size="16" font-weight="bold" fill="#FFFFFF">
+    KTR Platform
+  </text>
+  <text x="55" y="45" font-family="Arial, sans-serif" font-size="12" font-weight="normal" fill="#E3F2FD">
+    Migration Pro
+  </text>
+  <text x="55" y="58" font-family="Arial, sans-serif" font-size="9" font-weight="normal" fill="#B3E5FC">
+    Data Pipeline Manager
+  </text>
+  
+  <!-- Decorative Elements -->
+  <circle cx="175" cy="15" r="2" fill="rgba(255,255,255,0.3)"/>
+  <circle cx="185" cy="25" r="1.5" fill="rgba(255,255,255,0.2)"/>
+  <circle cx="180" cy="35" r="1" fill="rgba(255,255,255,0.3)"/>
+  
+  <!-- Bottom accent line -->
+  <rect x="55" y="65" width="120" height="1" fill="rgba(255,255,255,0.3)"/>
+</svg> 
