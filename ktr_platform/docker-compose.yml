@@ -63,7 +63,7 @@ services:
       - "com.ktr-platform.service=main-app"
       - "com.ktr-platform.version=1.0"
 
-  # Banco de dados PostgreSQL
+  # Banco de dados PostgreSQL (KTR Platform)
   postgres-db:
     image: postgres:15-alpine
     container_name: ktr-platform-db
@@ -87,6 +87,33 @@ services:
       retries: 5
     labels:
       - "com.ktr-platform.service=database"
+
+  # Banco de dados BISPU (Testes de KTR)
+  bispu-db:
+    image: postgres:15-alpine
+    container_name: ktr-platform-bispu-db
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${BISPU_DB_NAME:-bispu}
+      - POSTGRES_USER=${BISPU_DB_USER:-bispu_user}
+      - POSTGRES_PASSWORD=${BISPU_DB_PASSWORD:-bispu_secure_pass}
+      - POSTGRES_INITDB_ARGS=--encoding=UTF-8 --lc-collate=pt_BR.UTF-8 --lc-ctype=pt_BR.UTF-8
+    volumes:
+      - bispu_data:/var/lib/postgresql/data
+      - ./docker/init-bispu-db.sql:/docker-entrypoint-initdb.d/init-bispu-db.sql:ro
+    networks:
+      - ktr-network
+    ports:
+      - "${BISPU_DB_PORT:-5433}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${BISPU_DB_USER:-bispu_user} -d ${BISPU_DB_NAME:-bispu}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    labels:
+      - "com.ktr-platform.service=bispu-database"
+    profiles:
+      - bispu
 
   # Redis para cache e sessões (opcional)
   redis-cache:
@@ -210,6 +237,12 @@ volumes:
     name: ktr-platform-postgres
     labels:
       - "com.ktr-platform.volume=database"
+  
+  bispu_data:
+    driver: local
+    name: ktr-platform-bispu
+    labels:
+      - "com.ktr-platform.volume=bispu-database"
   
   # Cache Redis
   redis_data:

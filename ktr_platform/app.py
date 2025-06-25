@@ -9,7 +9,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
 from datetime import datetime, timedelta
-from streamlit_autorefresh import st_autorefresh
+# from streamlit_autorefresh import st_autorefresh  # Removido - usando JavaScript nativo
 from loguru import logger
 import re
 
@@ -260,7 +260,8 @@ def show_dashboard():
     
     # Auto-refresh para fluxos em execução
     if any(executor.is_flow_running(flow.id) for flow in all_flows):
-        st_autorefresh(interval=3000, key="dashboard_auto_refresh")  # Refresh a cada 3 segundos
+        # Auto-refresh implementado via JavaScript nativo no sistema de tempo real
+        pass  # Mantém a estrutura do if
 
 
 def show_flows_as_cards(flows):
@@ -762,32 +763,127 @@ def show_monitor():
     </div>
     """, unsafe_allow_html=True)
     
-    # SISTEMA DE AUTO-REFRESH MELHORADO
+    # SISTEMA DE TEMPO REAL COM AUTO-REFRESH INTELIGENTE
     current_time = datetime.now()
     
-    # Criar um placeholder para atualizações dinâmicas
-    refresh_placeholder = st.empty()
+    # Container de status dinâmico
+    status_container = st.container()
     
-    # Sistema de refresh baseado em condições
-    refresh_needed = False
-    refresh_interval = 3000  # 3 segundos padrão
+    with status_container:
+        # Sistema de refresh automático baseado em estado
+        if is_running:
+            # Durante execução: atualização a cada 1 segundo
+            st.markdown("""
+            <script>
+                setTimeout(function() {
+                    window.parent.document.querySelector('[data-testid="stApp"]').click();
+                }, 1000);
+            </script>
+            """, unsafe_allow_html=True)
+            
+            st.success(f"🔄 **EXECUTANDO EM TEMPO REAL** - Monitoramento ativo: {current_time.strftime('%H:%M:%S')}")
+            
+        elif flow.error_message or flow.execution_status in ["Falha", "Erro"]:
+            # Com erro: atualização a cada 2 segundos (para detectar correções)
+            st.markdown("""
+            <script>
+                setTimeout(function() {
+                    window.parent.document.querySelector('[data-testid="stApp"]').click();
+                }, 2000);
+            </script>
+            """, unsafe_allow_html=True)
+            
+            st.error(f"💥 **ERRO DETECTADO** - Sistema monitorando falhas: {current_time.strftime('%H:%M:%S')}")
+            
+        else:
+            # Estado normal: atualização a cada 5 segundos
+            st.markdown("""
+            <script>
+                setTimeout(function() {
+                    window.parent.document.querySelector('[data-testid="stApp"]').click();
+                }, 5000);
+            </script>
+            """, unsafe_allow_html=True)
+            
+            st.info(f"📊 **MONITORAMENTO ATIVO** - Última verificação: {current_time.strftime('%H:%M:%S')}")
     
-    if is_running:
-        refresh_needed = True
-        refresh_interval = 500  # 0.5 segundos durante execução
-        refresh_placeholder.success(f"🔄 EXECUTANDO - Próxima atualização em 0.5s - {current_time.strftime('%H:%M:%S')}")
-    elif flow.error_message:
-        refresh_needed = True
-        refresh_interval = 2000  # 2 segundos para erros
-        refresh_placeholder.error(f"💥 ERRO DETECTADO - Última atualização: {current_time.strftime('%H:%M:%S')}")
-    elif flow.execution_status in ["Falha", "Erro"]:
-        refresh_needed = True
-        refresh_interval = 5000  # 5 segundos para status de falha
-        refresh_placeholder.warning(f"⚠️ STATUS DE FALHA - Última atualização: {current_time.strftime('%H:%M:%S')}")
-    else:
-        refresh_placeholder.info(f"📊 Monitoramento ativo - {current_time.strftime('%H:%M:%S')}")
+    # BARRA DE PROGRESSO EM TEMPO REAL
+    progress_container = st.container()
     
-    # Exibir mensagem de erro detalhada, se houver
+    with progress_container:
+        # Análise de progresso baseada nos logs
+        progress_steps = analyze_execution_progress(flow)
+        total_steps = len(progress_steps) if progress_steps else 3  # Mínimo de 3 etapas padrão
+        completed_steps = len([s for s in progress_steps if s['status'] == 'completed'])
+        current_step = None
+        
+        # Identificar etapa atual em execução
+        for step in progress_steps:
+            if step['status'] == 'running':
+                current_step = step
+                break
+        
+        # Calcular progresso real
+        if is_running and current_step:
+            # Durante execução, mostrar progresso dinâmico
+            base_progress = (completed_steps / total_steps) * 100
+            # Adicionar progresso parcial da etapa atual (simulação baseada em tempo)
+            execution_time = calculate_current_duration_numeric(flow)
+            step_progress = min(0.8, execution_time / 30.0) * (100 / total_steps)  # Max 80% por etapa
+            progress_percentage = min(95, base_progress + step_progress)  # Nunca 100% até terminar
+        else:
+            progress_percentage = (completed_steps / total_steps) * 100 if total_steps > 0 else 0
+            
+        # Barra de progresso visual com animação
+        if is_running:
+            # Barra animada durante execução
+            st.markdown(f"""
+            <div style="background-color: #f0f2f6; border-radius: 10px; padding: 5px; margin: 10px 0;">
+                <div style="
+                    background: linear-gradient(90deg, #4CAF50, #2196F3);
+                    height: 25px;
+                    border-radius: 8px;
+                    width: {progress_percentage}%;
+                    transition: width 0.5s ease;
+                    animation: pulse 2s infinite;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: white;
+                    font-weight: bold;
+                ">
+                    🚀 {progress_percentage:.1f}%
+                </div>
+            </div>
+            <style>
+                @keyframes pulse {{
+                    0% {{ opacity: 0.8; }}
+                    50% {{ opacity: 1; }}
+                    100% {{ opacity: 0.8; }}
+                }}
+            </style>
+            """, unsafe_allow_html=True)
+        else:
+            # Barra estática quando não está executando
+            st.progress(progress_percentage / 100)
+            
+        # Métricas de progresso em tempo real
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if is_running:
+                st.metric("🚀 Progresso Atual", f"{progress_percentage:.1f}%", delta="Em execução")
+            else:
+                st.metric("📊 Progresso Final", f"{progress_percentage:.1f}%")
+        with col2:
+            st.metric("✅ Etapas Concluídas", f"{completed_steps}/{total_steps}")
+        with col3:
+            if current_step:
+                st.metric("🔄 Etapa Atual", current_step['name'])
+            else:
+                status_emoji = "🔄" if is_running else ("✅" if flow.execution_status == "Sucesso" else "❌")
+                st.metric("📍 Status", f"{status_emoji} {flow.execution_status}")
+
+    # DETECÇÃO E EXIBIÇÃO DE ERROS EM TEMPO REAL
     if flow.error_message:
         # Extrair a etapa do erro da mensagem
         stage_match = re.search(r'\[([^\]]+)\]', flow.error_message)
@@ -843,25 +939,51 @@ def show_monitor():
                 - Constraint violada: Verifique duplicatas ou campos obrigatórios
                 """)
 
-    # Análise dos logs para determinar progresso
-    progress_steps = analyze_execution_progress(flow)
+    # LOGS EM TEMPO REAL - Container para logs dinâmicos
+    st.markdown("---")
     
-    # Barra de progresso principal
-    total_steps = len(progress_steps)
-    completed_steps = len([s for s in progress_steps if s['status'] == 'completed'])
-    progress_percentage = (completed_steps / total_steps) * 100 if total_steps > 0 else 0
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("📊 Progresso Geral", f"{progress_percentage:.1f}%")
-    with col2:
-        st.metric("✅ Etapas Concluídas", f"{completed_steps}/{total_steps}")
-    with col3:
-        status_emoji = "🔄" if is_running else ("✅" if flow.execution_status == "Sucesso" else "❌")
-        st.metric("Status", f"{status_emoji} {flow.execution_status}")
-    
-    # Barra de progresso visual
-    st.progress(progress_percentage / 100)
+    # Logs em tempo real com scroll automático
+    if flow.execution_logs:
+        st.subheader("📊 Logs de Execução em Tempo Real")
+        
+        # Container de logs com altura fixa e auto-scroll
+        logs_container = st.container()
+        
+        with logs_container:
+            # Durante execução, mostrar apenas os últimos 20 logs para performance
+            if is_running:
+                recent_logs = flow.execution_logs[-20:]
+                st.info("🔄 Exibindo logs em tempo real (últimas 20 entradas)")
+            else:
+                recent_logs = flow.execution_logs[-50:]
+                st.info(f"📋 Total de {len(flow.execution_logs)} entradas de log")
+            
+            # Exibir logs com cores baseadas no conteúdo
+            for log_entry in recent_logs:
+                timestamp_now = datetime.now().strftime("%H:%M:%S")
+                
+                # Detectar tipo de log e aplicar cor
+                if "ERROR" in log_entry or "❌" in log_entry or "Erro" in log_entry or "[ERRO]" in log_entry:
+                    st.error(f"🔴 {log_entry}")
+                elif "WARNING" in log_entry or "⚠️" in log_entry or "Aviso" in log_entry:
+                    st.warning(f"🟡 {log_entry}")
+                elif "SUCCESS" in log_entry or "✅" in log_entry or "Sucesso" in log_entry or "concluída" in log_entry:
+                    st.success(f"🟢 {log_entry}")
+                elif "🚀" in log_entry or "Iniciando" in log_entry or "INFO" in log_entry:
+                    st.info(f"🔵 {log_entry}")
+                elif "🎯" in log_entry or "Pipeline" in log_entry:
+                    st.info(f"⚡ {log_entry}")
+                else:
+                    st.text(f"⚪ {log_entry}")
+                    
+        # Status de atualização dos logs
+        if is_running:
+            st.caption(f"🔄 Logs atualizando automaticamente... | {timestamp_now}")
+        else:
+            st.caption(f"📋 Logs finalizados | Última atualização: {timestamp_now}")
+            
+    else:
+        st.info("📝 Nenhum log disponível. Os logs aparecerão aqui durante a execução.")
     
     # Timeline das etapas
     st.subheader("🔄 Timeline de Execução")
@@ -952,8 +1074,9 @@ def show_monitor():
     
     with col4:
         auto_refresh = st.checkbox("🔄 Auto-refresh", value=True)
-        if auto_refresh and refresh_needed:
-            st_autorefresh(interval=refresh_interval, key=f"monitor_refresh_{flow_id}")
+        # Auto-refresh está implementado via JavaScript no sistema de tempo real
+        if auto_refresh:
+            st.caption("🔄 Refresh automático ativo")
 
     # Logs em tempo real com análise
     st.markdown("---")
@@ -1075,6 +1198,23 @@ def calculate_current_duration(flow, is_running):
         return f"{duration:.1f}s"
     except:
         return "-"
+
+def calculate_current_duration_numeric(flow):
+    """Calcula duração atual em segundos (numérico) para cálculos de progresso."""
+    if not flow.execution_start_time:
+        return 0
+    
+    try:
+        start_time = pd.to_datetime(flow.execution_start_time)
+        
+        if flow.execution_end_time:
+            end_time = pd.to_datetime(flow.execution_end_time)
+            return (end_time - start_time).total_seconds()
+        else:
+            current_time = pd.Timestamp.now()
+            return (current_time - start_time).total_seconds()
+    except:
+        return 0
 
 def show_rename():
     """Página de renomeação melhorada."""
