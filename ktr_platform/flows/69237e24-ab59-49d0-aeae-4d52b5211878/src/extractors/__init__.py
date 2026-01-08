@@ -1,2 +1,0 @@
-from .excel_input_localizacao_imovel_extractor import ExcelInputLocalizacaoImovelPipelineExtractor
-from .excel_input_localizacao_imovel_2_extractor import ExcelInputLocalizacaoImovel2PipelineExtractor

@@ -1,2 +1,0 @@
-from .table_output_documento_local_loader import TableoutputdocumentolocalPipelineLoader
-from .table_output_documento_producao_loader import TableoutputdocumentoproducaoPipelineLoader

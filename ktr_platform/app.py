@@ -385,9 +385,9 @@ def show_flows_as_table(flows):
 
 
 def show_detailed_ktr_analysis(ktr_model):
-    """Mostra análise detalhada do fluxo KTR."""
+    """Mostra análise detalhada do fluxo KTR estilo n8n."""
     st.markdown("---")
-    st.subheader("🔍 Análise Detalhada do Fluxo KTR")
+    st.subheader("🔍 Análise Detalhada do Fluxo KTR - Visão n8n")
     
     with st.spinner("🔍 Executando análise avançada..."):
         try:
@@ -395,168 +395,1243 @@ def show_detailed_ktr_analysis(ktr_model):
             analyzer = PipelineAnalyzer()
             analysis_result = analyzer.analyze_pipeline(ktr_model)
             
-            # Mostrar análise geral
-            col1, col2, col3, col4 = st.columns(4)
+            # Header com informações gerais
+            col1, col2, col3, col4, col5 = st.columns(5)
             with col1:
-                st.metric("🎯 Score de Complexidade", analysis_result.complexity_score)
+                st.metric("🎯 Complexidade", analysis_result.complexity_score, 
+                         delta="Alta" if analysis_result.complexity_score > 7 else "Média" if analysis_result.complexity_score > 4 else "Baixa")
             with col2:
-                st.metric("⚡ Ganho de Performance", f"{analysis_result.estimated_performance_gain}%")
+                st.metric("⚡ Performance", f"{analysis_result.estimated_performance_gain}%")
             with col3:
-                st.metric("🔍 Padrões Detectados", len(analysis_result.patterns))
+                st.metric("🔍 Padrões", len(analysis_result.patterns))
             with col4:
                 st.metric("💡 Otimizações", len(analysis_result.optimizations))
+            with col5:
+                st.metric("🔗 Conexões", analysis_result.metrics.get("total_hops", 0))
+
+            # Tabs para diferentes visualizações
+            tab1, tab2, tab3, tab4, tab5 = st.tabs([
+                "🎯 Visão Geral", 
+                "📊 Nodes Detalhados", 
+                "🔗 Fluxo de Dados", 
+                "📈 Métricas", 
+                "💡 Otimizações"
+            ])
             
-            # Análise das etapas do fluxo
-            st.markdown("### 📋 Etapas do Fluxo")
+            with tab1:
+                show_flow_overview(ktr_model, analysis_result)
             
-            # Categorizar etapas
-            input_steps = [step for step in ktr_model.steps if step.is_input]
-            transform_steps = [step for step in ktr_model.steps if step.is_transform]
-            output_steps = [step for step in ktr_model.steps if step.is_output]
+            with tab2:
+                show_detailed_nodes(ktr_model)
             
-            # Explicação geral do fluxo
-            st.markdown("#### 🎯 Resumo do Fluxo")
-            flow_explanation = f"""
-            **{ktr_model.name}** é um pipeline de dados que:
+            with tab3:
+                show_data_flow(ktr_model, analysis_result)
             
-            • **Extrai** dados de {len(input_steps)} fonte(s)
-            • **Transforma** usando {len(transform_steps)} etapa(s) de processamento
-            • **Carrega** em {len(output_steps)} destino(s)
+            with tab4:
+                show_detailed_metrics(analysis_result)
             
-            **Complexidade**: {'Alta' if analysis_result.complexity_score > 7 else 'Média' if analysis_result.complexity_score > 4 else 'Baixa'}
-            """
-            st.info(flow_explanation)
-            
-            # Detalhes das etapas por categoria
-            if input_steps:
-                with st.expander("📥 Etapas de Entrada", expanded=True):
-                    for step in input_steps:
-                        col1, col2 = st.columns([1, 3])
-                        with col1:
-                            st.write(f"**{step.name}**")
-                            st.caption(f"Tipo: {step.type.value}")
-                        with col2:
-                            explanation = get_step_explanation(step)
-                            st.write(explanation)
-            
-            if transform_steps:
-                with st.expander("🔄 Etapas de Transformação", expanded=True):
-                    for step in transform_steps:
-                        col1, col2 = st.columns([1, 3])
-                        with col1:
-                            st.write(f"**{step.name}**")
-                            st.caption(f"Tipo: {step.type.value}")
-                        with col2:
-                            explanation = get_step_explanation(step)
-                            st.write(explanation)
-            
-            if output_steps:
-                with st.expander("📤 Etapas de Saída", expanded=True):
-                    for step in output_steps:
-                        col1, col2 = st.columns([1, 3])
-                        with col1:
-                            st.write(f"**{step.name}**")
-                            st.caption(f"Tipo: {step.type.value}")
-                        with col2:
-                            explanation = get_step_explanation(step)
-                            st.write(explanation)
-            
-            # Padrões detectados
-            if analysis_result.patterns:
-                st.markdown("### 🎯 Padrões Detectados")
-                for pattern in analysis_result.patterns:
-                    with st.expander(f"🔍 {pattern.name} (Confiança: {pattern.confidence:.0%})"):
-                        st.write(pattern.description)
-                        if pattern.steps_involved:
-                            st.write("**Etapas envolvidas:**")
-                            for step_name in pattern.steps_involved:
-                                st.write(f"• {step_name}")
-            
-            # Sugestões de otimização
-            if analysis_result.optimizations:
-                st.markdown("### 💡 Sugestões de Otimização")
-                for opt in analysis_result.optimizations:
-                    impact_color = {"high": "🔴", "medium": "🟡", "low": "🟢"}
-                    color = impact_color.get(opt.impact, "🔵")
-                    
-                    with st.expander(f"{color} {opt.type} - Impacto {opt.impact.title()}"):
-                        st.write(opt.description)
-                        if opt.code_example:
-                            st.code(opt.code_example, language="python")
-            
-            # Métricas detalhadas
-            if analysis_result.metrics:
-                st.markdown("### 📊 Métricas Detalhadas")
+            with tab5:
+                show_optimization_recommendations(analysis_result)
                 
-                col1, col2 = st.columns(2)
-                with col1:
-                    st.metric("Total de Etapas", analysis_result.metrics.get("total_steps", 0))
-                    st.metric("Etapas de Entrada", analysis_result.metrics.get("input_steps", 0))
-                    st.metric("Etapas de Transformação", analysis_result.metrics.get("transform_steps", 0))
-                    st.metric("Etapas de Saída", analysis_result.metrics.get("output_steps", 0))
-                
-                with col2:
-                    st.metric("Conexões Totais", analysis_result.metrics.get("total_connections", 0))
-                    st.metric("Profundidade do Grafo", analysis_result.metrics.get("graph_depth", 0))
-                    st.metric("Largura do Grafo", analysis_result.metrics.get("graph_width", 0))
-                    st.metric("Ciclos Detectados", analysis_result.metrics.get("cycles", 0))
-                    
         except Exception as e:
             st.error(f"❌ Erro na análise detalhada: {e}")
             logger.error(f"Erro na análise detalhada: {e}")
 
 
+def show_flow_overview(ktr_model, analysis_result):
+    """Mostra visão geral do fluxo"""
+    
+    # Mapa visual do fluxo
+    st.markdown("### 🗺️ Mapeamento Visual do Pipeline")
+    
+    input_steps = [step for step in ktr_model.steps if step.is_input]
+    transform_steps = [step for step in ktr_model.steps if step.is_transform]
+    output_steps = [step for step in ktr_model.steps if step.is_output]
+    
+    # Layout visual estilo flowchart
+    col1, col2, col3 = st.columns([2, 3, 2])
+    
+    with col1:
+        st.markdown("#### 📥 **ENTRADA**")
+        for i, step in enumerate(input_steps):
+            st.markdown(f"""
+            <div style="
+                background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                padding: 0.8rem;
+                border-radius: 8px;
+                margin: 0.5rem 0;
+                color: white;
+                text-align: center;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            ">
+                <strong>{step.name}</strong><br>
+                <small>{step.type.value}</small>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    with col2:
+        st.markdown("#### 🔄 **TRANSFORMAÇÃO**")
+        if transform_steps:
+            for i, step in enumerate(transform_steps):
+                st.markdown(f"""
+                <div style="
+                    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+                    padding: 0.8rem;
+                    border-radius: 8px;
+                    margin: 0.5rem 0;
+                    color: white;
+                    text-align: center;
+                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+                ">
+                    <strong>{step.name}</strong><br>
+                    <small>{step.type.value}</small>
+                </div>
+                """, unsafe_allow_html=True)
+        else:
+            st.info("Nenhuma transformação intermediária")
+    
+    with col3:
+        st.markdown("#### 📤 **SAÍDA**")
+        for i, step in enumerate(output_steps):
+            st.markdown(f"""
+            <div style="
+                background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+                padding: 0.8rem;
+                border-radius: 8px;
+                margin: 0.5rem 0;
+                color: white;
+                text-align: center;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            ">
+                <strong>{step.name}</strong><br>
+                <small>{step.type.value}</small>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    # Resumo estatístico
+    st.markdown("---")
+    st.markdown("### 📊 Resumo Estatístico")
+    
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("📊 Total de Steps", len(ktr_model.steps))
+    with col2:
+        st.metric("🔗 Conexões", len(ktr_model.hops))
+    with col3:
+        st.metric("💾 Fontes de Dados", len(input_steps))
+    with col4:
+        st.metric("🎯 Destinos", len(output_steps))
+
+
+def show_detailed_nodes(ktr_model):
+    """Mostra detalhes de cada node estilo n8n"""
+    st.markdown("### 🎛️ Análise Detalhada de Cada Node")
+    st.markdown("*Clique em um node para ver detalhes completos*")
+    
+    for i, step in enumerate(ktr_model.steps):
+        # Card expansível para cada step
+        step_color = get_step_color(step)
+        step_icon = get_step_icon(step)
+        
+        with st.expander(f"{step_icon} **{step.name}** - {step.type.value}", expanded=False):
+            
+            # Header do node
+            col1, col2, col3 = st.columns([2, 2, 1])
+            
+            with col1:
+                st.markdown(f"**🏷️ Tipo:** {step.type.value}")
+                st.markdown(f"**📝 Descrição:** {step.description or 'Sem descrição'}")
+            
+            with col2:
+                st.markdown(f"**🔖 Categoria:** {get_step_category(step)}")
+                st.markdown(f"**⚡ Complexidade:** {get_step_complexity(step)}")
+            
+            with col3:
+                st.markdown(f"""
+                <div style="
+                    background: {step_color};
+                    width: 60px;
+                    height: 60px;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 24px;
+                    color: white;
+                    margin: auto;
+                ">
+                    {step_icon}
+                </div>
+                """, unsafe_allow_html=True)
+            
+            st.markdown("---")
+            
+            # Tabs para diferentes aspectos do node
+            tab1, tab2, tab3, tab4 = st.tabs(["⚙️ Configuração", "📊 Dados", "🔗 Conexões", "🚀 Performance"])
+            
+            with tab1:
+                show_step_configuration(step)
+            
+            with tab2:
+                show_step_data_details(step)
+            
+            with tab3:
+                show_step_connections(step, ktr_model)
+            
+            with tab4:
+                show_step_performance(step)
+
+
+def show_step_configuration(step):
+    """Mostra configuração detalhada do step"""
+    st.markdown("#### ⚙️ Configuração do Node")
+    
+    if hasattr(step, 'config') and step.config:
+        config_data = []
+        for key, value in step.config.items():
+            config_data.append({"Parâmetro": key, "Valor": str(value)})
+        
+        if config_data:
+            df_config = pd.DataFrame(config_data)
+            st.dataframe(df_config, use_container_width=True)
+        else:
+            st.info("Nenhuma configuração específica encontrada")
+    else:
+        st.info("Configuração padrão")
+    
+    # Configurações específicas por tipo
+    if step.type.value == "TableInput":
+        show_table_input_config(step)
+    elif step.type.value == "TableOutput":
+        show_table_output_config(step)
+    elif step.type.value == "ExcelInput":
+        show_excel_input_config(step)
+    elif step.type.value == "StringOperations":
+        show_string_operations_config(step)
+
+
+def show_table_input_config(step):
+    """Configuração específica para TableInput"""
+    st.markdown("##### 📊 Configuração de Entrada de Tabela")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown(f"**🔗 Conexão:** {getattr(step, 'connection_name', 'Não definida')}")
+        st.markdown(f"**📋 Tabela/Query:** {getattr(step, 'sql', 'Não definida')}")
+    with col2:
+        st.markdown(f"**📊 Limite:** {getattr(step, 'limit', 'Sem limite')}")
+        st.markdown(f"**🔄 Lazy Conversion:** {'Sim' if getattr(step, 'lazy_conversion', False) else 'Não'}")
+
+
+def show_table_output_config(step):
+    """Configuração específica para TableOutput"""
+    st.markdown("##### 💾 Configuração de Saída de Tabela")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown(f"**🔗 Conexão:** {getattr(step, 'connection_name', 'Não definida')}")
+        st.markdown(f"**📊 Schema:** {getattr(step, 'schema', 'Padrão')}")
+        st.markdown(f"**📋 Tabela:** {getattr(step, 'table', 'Não definida')}")
+    with col2:
+        st.markdown(f"**🗑️ Truncar:** {'Sim' if getattr(step, 'truncate', False) else 'Não'}")
+        st.markdown(f"**📦 Commit Size:** {getattr(step, 'commit_size', 1000)}")
+
+
+def show_excel_input_config(step):
+    """Configuração específica para ExcelInput"""
+    st.markdown("##### 📈 Configuração de Entrada Excel")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown(f"**📁 Arquivo:** {getattr(step, 'file_path', 'Não definido')}")
+        st.markdown(f"**📄 Planilha:** {getattr(step, 'sheet_name', 'Primeira')}")
+    with col2:
+        st.markdown(f"**📋 Header:** {'Sim' if getattr(step, 'header', True) else 'Não'}")
+        st.markdown(f"**📍 Linha Inicial:** {getattr(step, 'start_row', 0)}")
+
+
+def show_string_operations_config(step):
+    """Configuração específica para StringOperations"""
+    st.markdown("##### 🔤 Operações de String")
+    
+    operations = getattr(step, 'operations', [])
+    if operations:
+        for i, op in enumerate(operations):
+            st.markdown(f"**Operação {i+1}:** {op.get('operation_type', 'Não definida')}")
+            st.markdown(f"**Campo:** {op.get('field_name', 'Não definido')}")
+    else:
+        st.info("Nenhuma operação específica configurada")
+
+
+def show_step_data_details(step):
+    """Mostra detalhes dos dados do step"""
+    st.markdown("#### 📊 Estrutura de Dados")
+    
+    # Campos esperados (se disponível)
+    if hasattr(step, 'fields') and step.fields:
+        st.markdown("##### 📋 Campos Definidos")
+        fields_data = []
+        for field in step.fields:
+            fields_data.append({
+                "Campo": field.name,
+                "Tipo": field.type,
+                "Tamanho": field.length if field.length > 0 else "Variável",
+                "Precisão": field.precision if field.precision > 0 else "N/A",
+                "Formato": field.format or "Padrão"
+            })
+        
+        df_fields = pd.DataFrame(fields_data)
+        st.dataframe(df_fields, use_container_width=True)
+    else:
+        st.info("Estrutura de campos será determinada em tempo de execução")
+    
+    # Estimativas de volume
+    st.markdown("##### 📈 Estimativas de Volume")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("📊 Registros Estimados", get_estimated_records(step))
+    with col2:
+        st.metric("💾 Tamanho Estimado", get_estimated_size(step))
+    with col3:
+        st.metric("⏱️ Tempo Estimado", get_estimated_time(step))
+
+
+def show_step_connections(step, ktr_model):
+    """Mostra conexões do step"""
+    st.markdown("#### 🔗 Conectividade do Node")
+    
+    # Entrada (steps que conectam a este)
+    incoming = [hop for hop in ktr_model.hops if hop.to_step == step.name]
+    # Saída (steps para onde este conecta)
+    outgoing = [hop for hop in ktr_model.hops if hop.from_step == step.name]
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("##### ⬅️ Entradas")
+        if incoming:
+            for hop in incoming:
+                st.markdown(f"• **{hop.from_step}** → {step.name}")
+                if not hop.enabled:
+                    st.caption("  ⚠️ Conexão desabilitada")
+        else:
+            st.info("Nenhuma entrada (step inicial)")
+    
+    with col2:
+        st.markdown("##### ➡️ Saídas")
+        if outgoing:
+            for hop in outgoing:
+                st.markdown(f"• {step.name} → **{hop.to_step}**")
+                if not hop.enabled:
+                    st.caption("  ⚠️ Conexão desabilitada")
+        else:
+            st.info("Nenhuma saída (step final)")
+    
+    # Posição no fluxo
+    st.markdown("##### 🎯 Posição no Pipeline")
+    position = "Início" if not incoming else "Fim" if not outgoing else "Intermediário"
+    depth = calculate_step_depth(step, ktr_model)
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        st.metric("📍 Posição", position)
+    with col2:
+        st.metric("📏 Profundidade", depth)
+
+
+def show_step_performance(step):
+    """Mostra informações de performance do step"""
+    st.markdown("#### 🚀 Análise de Performance")
+    
+    # Métricas estimadas de performance
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        st.metric("⚡ Velocidade", get_step_speed_rating(step))
+        st.metric("🧠 Uso de Memória", get_memory_usage_rating(step))
+    
+    with col2:
+        st.metric("💾 Uso de CPU", get_cpu_usage_rating(step))
+        st.metric("🌐 Uso de Rede", get_network_usage_rating(step))
+    
+    with col3:
+        st.metric("💿 Uso de I/O", get_io_usage_rating(step))
+        st.metric("🔧 Complexidade", get_step_complexity(step))
+    
+    # Sugestões específicas
+    st.markdown("##### 💡 Sugestões de Otimização")
+    suggestions = get_step_optimization_suggestions(step)
+    if suggestions:
+        for suggestion in suggestions:
+            st.info(f"💡 {suggestion}")
+    else:
+        st.success("✅ Step otimizado adequadamente")
+
+
+def show_data_flow(ktr_model, analysis_result):
+    """Mostra fluxo de dados detalhado"""
+    st.markdown("### 🔗 Análise do Fluxo de Dados")
+    
+    # Grafo visual do pipeline
+    st.markdown("#### 📊 Mapeamento de Dependências")
+    
+    # Criar visualização com Plotly
+    fig = create_flow_diagram(ktr_model)
+    st.plotly_chart(fig, use_container_width=True)
+    
+    # Análise de caminhos críticos
+    st.markdown("#### 🎯 Caminhos Críticos")
+    critical_paths = find_critical_paths(ktr_model)
+    
+    if critical_paths:
+        for i, path in enumerate(critical_paths):
+            st.markdown(f"**Caminho {i+1}:** {' → '.join(path)}")
+    else:
+        st.info("Pipeline linear - sem caminhos paralelos")
+    
+    # Pontos de gargalo
+    st.markdown("#### 🚨 Análise de Gargalos")
+    bottlenecks = find_bottlenecks(ktr_model)
+    
+    if bottlenecks:
+        for bottleneck in bottlenecks:
+            st.warning(f"⚠️ Possível gargalo: **{bottleneck['step']}** - {bottleneck['reason']}")
+    else:
+        st.success("✅ Nenhum gargalo crítico identificado")
+
+
+def show_detailed_metrics(analysis_result):
+    """Mostra métricas detalhadas"""
+    st.markdown("### 📈 Métricas Avançadas")
+    
+    metrics = analysis_result.metrics
+    
+    # Métricas em grid
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("📊 Total Steps", metrics.get("total_steps", 0))
+        st.metric("📥 Steps Entrada", metrics.get("input_steps", 0))
+    
+    with col2:
+        st.metric("🔄 Steps Transformação", metrics.get("transform_steps", 0))
+        st.metric("📤 Steps Saída", metrics.get("output_steps", 0))
+    
+    with col3:
+        st.metric("🔗 Conexões", metrics.get("total_connections", 0))
+        st.metric("🔀 Hops", metrics.get("total_hops", 0))
+    
+    with col4:
+        st.metric("📏 Profundidade", metrics.get("graph_depth", 0))
+        st.metric("📐 Largura", metrics.get("graph_width", 0))
+    
+    # Gráficos de análise
+    if metrics:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            try:
+                # Distribuição por tipo
+                step_type_names = ["Entrada", "Transformação", "Saída"]
+                step_type_values = [
+                    metrics.get("input_steps", 0),
+                    metrics.get("transform_steps", 0),
+                    metrics.get("output_steps", 0)
+                ]
+                
+                # Verificar se há dados válidos
+                if sum(step_type_values) > 0:
+                    fig_pie = px.pie(
+                        values=step_type_values,
+                        names=step_type_names,
+                        title="Distribuição de Steps por Tipo"
+                    )
+                    st.plotly_chart(fig_pie, use_container_width=True)
+                else:
+                    st.info("📊 Nenhum step encontrado para análise")
+            except Exception as e:
+                st.error(f"❌ Erro no gráfico de distribuição: {str(e)}")
+        
+        with col2:
+            try:
+                # Complexidade vs Performance
+                complexity_score = getattr(analysis_result, 'complexity_score', 0)
+                performance_gain = getattr(analysis_result, 'estimated_performance_gain', 0)
+                optimizations_count = len(getattr(analysis_result, 'optimizations', []))
+                
+                metrics_names = ["Complexidade", "Performance", "Otimizações"]
+                metrics_values = [complexity_score, performance_gain, optimizations_count]
+                
+                # Verificar se temos dados válidos e arrays do mesmo tamanho
+                if len(metrics_names) == len(metrics_values) and any(v > 0 for v in metrics_values):
+                    fig_bar = px.bar(
+                        x=metrics_names,
+                        y=metrics_values,
+                        title="Métricas de Análise"
+                    )
+                    st.plotly_chart(fig_bar, use_container_width=True)
+                else:
+                    st.info("📈 Dados insuficientes para gráfico de métricas")
+            except Exception as e:
+                st.error(f"❌ Erro no gráfico de métricas: {str(e)}")
+    else:
+        st.warning("📊 Métricas não disponíveis")
+
+
+def show_optimization_recommendations(analysis_result):
+    """Mostra recomendações de otimização"""
+    st.markdown("### 💡 Recomendações de Otimização")
+    
+    if not analysis_result.optimizations:
+        st.success("🎉 Pipeline já está bem otimizado!")
+        return
+    
+    # Agrupar por impacto
+    high_impact = [opt for opt in analysis_result.optimizations if opt.impact == "high"]
+    medium_impact = [opt for opt in analysis_result.optimizations if opt.impact == "medium"]
+    low_impact = [opt for opt in analysis_result.optimizations if opt.impact == "low"]
+    
+    if high_impact:
+        st.markdown("#### 🔴 Alto Impacto (Prioridade)")
+        for opt in high_impact:
+            with st.expander(f"🔴 {opt.type} - {opt.description[:50]}..."):
+                st.markdown(opt.description)
+                if opt.code_example:
+                    st.code(opt.code_example, language="python")
+    
+    if medium_impact:
+        st.markdown("#### 🟡 Médio Impacto")
+        for opt in medium_impact:
+            with st.expander(f"🟡 {opt.type} - {opt.description[:50]}..."):
+                st.markdown(opt.description)
+                if opt.code_example:
+                    st.code(opt.code_example, language="python")
+    
+    if low_impact:
+        st.markdown("#### 🟢 Baixo Impacto")
+        for opt in low_impact:
+            with st.expander(f"🟢 {opt.type} - {opt.description[:50]}..."):
+                st.markdown(opt.description)
+                if opt.code_example:
+                    st.code(opt.code_example, language="python")
+
+
+# Funções auxiliares para análise detalhada
+
+def get_step_color(step):
+    """Retorna cor para o step baseada no tipo"""
+    color_map = {
+        "TableInput": "#667eea",
+        "ExcelInput": "#667eea", 
+        "TextFileInput": "#667eea",
+        "TableOutput": "#4facfe",
+        "ExcelOutput": "#4facfe",
+        "TextFileOutput": "#4facfe",
+        "StringOperations": "#f093fb",
+        "FilterRows": "#f093fb",
+        "ValueMapper": "#f093fb",
+        "Calculator": "#f093fb",
+        "SortRows": "#f093fb",
+        "GroupBy": "#f093fb",
+        "SelectValues": "#f093fb"
+    }
+    return color_map.get(step.type.value, "#9ca3af")
+
+
+def get_step_icon(step):
+    """Retorna ícone para o step"""
+    icon_map = {
+        "TableInput": "📊",
+        "ExcelInput": "📈",
+        "TextFileInput": "📄",
+        "TableOutput": "💾",
+        "ExcelOutput": "📊",
+        "TextFileOutput": "📁",
+        "StringOperations": "🔤",
+        "FilterRows": "🔍",
+        "ValueMapper": "🗺️",
+        "Calculator": "🧮",
+        "SortRows": "📊",
+        "GroupBy": "📋",
+        "SelectValues": "✅"
+    }
+    return icon_map.get(step.type.value, "⚙️")
+
+
+def get_step_category(step):
+    """Retorna categoria do step"""
+    if step.is_input:
+        return "Entrada de Dados"
+    elif step.is_output:
+        return "Saída de Dados"
+    else:
+        return "Transformação"
+
+
+def get_step_complexity(step):
+    """Calcula complexidade do step"""
+    complexity_map = {
+        "TableInput": "Baixa",
+        "ExcelInput": "Baixa",
+        "TextFileInput": "Baixa",
+        "TableOutput": "Baixa",
+        "ExcelOutput": "Baixa", 
+        "TextFileOutput": "Baixa",
+        "StringOperations": "Média",
+        "FilterRows": "Baixa",
+        "ValueMapper": "Média",
+        "Calculator": "Média",
+        "SortRows": "Média",
+        "GroupBy": "Alta",
+        "SelectValues": "Baixa"
+    }
+    return complexity_map.get(step.type.value, "Média")
+
+
+def get_estimated_records(step):
+    """Estima número de registros"""
+    if step.is_input:
+        return "10K - 100K"
+    elif step.is_transform:
+        return "Variável"
+    else:
+        return "Conforme entrada"
+
+
+def get_estimated_size(step):
+    """Estima tamanho dos dados"""
+    if step.is_input:
+        return "1-10 MB"
+    else:
+        return "Conforme entrada"
+
+
+def get_estimated_time(step):
+    """Estima tempo de execução"""
+    time_map = {
+        "TableInput": "1-5s",
+        "ExcelInput": "2-10s",
+        "TextFileInput": "1-5s",
+        "TableOutput": "2-10s",
+        "ExcelOutput": "5-15s",
+        "TextFileOutput": "1-5s",
+        "StringOperations": "< 1s",
+        "FilterRows": "< 1s",
+        "ValueMapper": "< 1s",
+        "Calculator": "< 1s",
+        "SortRows": "1-5s",
+        "GroupBy": "2-10s",
+        "SelectValues": "< 1s"
+    }
+    return time_map.get(step.type.value, "1-5s")
+
+
+def calculate_step_depth(step, ktr_model):
+    """Calcula profundidade do step no pipeline"""
+    def get_depth(step_name, visited=None):
+        if visited is None:
+            visited = set()
+        
+        if step_name in visited:
+            return 0  # Evitar loops
+        
+        visited.add(step_name)
+        
+        incoming = [hop for hop in ktr_model.hops if hop.to_step == step_name]
+        if not incoming:
+            return 0
+        
+        max_depth = 0
+        for hop in incoming:
+            depth = get_depth(hop.from_step, visited.copy())
+            max_depth = max(max_depth, depth + 1)
+        
+        return max_depth
+    
+    return get_depth(step.name)
+
+
+def get_step_speed_rating(step):
+    """Rating de velocidade do step"""
+    speed_map = {
+        "TableInput": "Rápido",
+        "ExcelInput": "Médio",
+        "TextFileInput": "Rápido",
+        "TableOutput": "Médio",
+        "ExcelOutput": "Lento",
+        "TextFileOutput": "Rápido",
+        "StringOperations": "Muito Rápido",
+        "FilterRows": "Muito Rápido",
+        "ValueMapper": "Rápido",
+        "Calculator": "Rápido",
+        "SortRows": "Médio",
+        "GroupBy": "Lento",
+        "SelectValues": "Muito Rápido"
+    }
+    return speed_map.get(step.type.value, "Médio")
+
+
+def get_memory_usage_rating(step):
+    """Rating de uso de memória"""
+    memory_map = {
+        "TableInput": "Baixo",
+        "ExcelInput": "Médio",
+        "TextFileInput": "Baixo",
+        "TableOutput": "Baixo",
+        "ExcelOutput": "Médio",
+        "TextFileOutput": "Baixo",
+        "StringOperations": "Baixo",
+        "FilterRows": "Baixo",
+        "ValueMapper": "Baixo",
+        "Calculator": "Baixo",
+        "SortRows": "Alto",
+        "GroupBy": "Alto",
+        "SelectValues": "Baixo"
+    }
+    return memory_map.get(step.type.value, "Médio")
+
+
+def get_cpu_usage_rating(step):
+    """Rating de uso de CPU"""
+    cpu_map = {
+        "TableInput": "Baixo",
+        "ExcelInput": "Médio",
+        "TextFileInput": "Baixo",
+        "TableOutput": "Baixo",
+        "ExcelOutput": "Médio",
+        "TextFileOutput": "Baixo",
+        "StringOperations": "Médio",
+        "FilterRows": "Baixo",
+        "ValueMapper": "Baixo",
+        "Calculator": "Médio",
+        "SortRows": "Alto",
+        "GroupBy": "Alto",
+        "SelectValues": "Baixo"
+    }
+    return cpu_map.get(step.type.value, "Médio")
+
+
+def get_network_usage_rating(step):
+    """Rating de uso de rede"""
+    if step.is_input or step.is_output:
+        return "Médio"
+    return "Nenhum"
+
+
+def get_io_usage_rating(step):
+    """Rating de uso de I/O"""
+    io_map = {
+        "TableInput": "Alto",
+        "ExcelInput": "Alto",
+        "TextFileInput": "Alto",
+        "TableOutput": "Alto",
+        "ExcelOutput": "Alto",
+        "TextFileOutput": "Alto",
+        "StringOperations": "Baixo",
+        "FilterRows": "Baixo",
+        "ValueMapper": "Baixo",
+        "Calculator": "Baixo",
+        "SortRows": "Médio",
+        "GroupBy": "Médio",
+        "SelectValues": "Baixo"
+    }
+    return io_map.get(step.type.value, "Médio")
+
+
+def get_step_optimization_suggestions(step):
+    """Sugestões específicas para o step"""
+    suggestions_map = {
+        "TableInput": [
+            "Use LIMIT para testes",
+            "Considere índices na tabela source",
+            "Avalie usar WHERE para filtrar na origem"
+        ],
+        "ExcelInput": [
+            "Converta para CSV se possível",
+            "Use apenas as colunas necessárias",
+            "Considere dividir arquivos grandes"
+        ],
+        "TableOutput": [
+            "Use batch inserts",
+            "Desabilite índices durante carga",
+            "Use TRUNCATE ao invés de DELETE"
+        ],
+        "SortRows": [
+            "Considere fazer sort no banco",
+            "Verifique se realmente precisa ordenar",
+            "Use apenas campos necessários"
+        ],
+        "GroupBy": [
+            "Agrupe no banco se possível",
+            "Use apenas agregações necessárias",
+            "Considere pré-filtrar dados"
+        ]
+    }
+    return suggestions_map.get(step.type.value, [])
+
+
+def create_flow_diagram(ktr_model):
+    """Cria diagrama visual do fluxo"""
+    import plotly.graph_objects as go
+    try:
+        import networkx as nx
+    except ImportError:
+        # Fallback para quando networkx não estiver disponível
+        fig = go.Figure()
+        fig.add_annotation(
+            text="📊 Visualização de grafo requer networkx<br>Execute: pip install networkx",
+            x=0.5, y=0.5,
+            showarrow=False,
+            font=dict(size=16)
+        )
+        return fig
+    
+    # Criar grafo
+    G = nx.DiGraph()
+    
+    # Adicionar nós
+    for step in ktr_model.steps:
+        G.add_node(step.name, type=step.type.value)
+    
+    # Adicionar arestas
+    for hop in ktr_model.hops:
+        if hop.enabled:
+            G.add_edge(hop.from_step, hop.to_step)
+    
+    # Layout hierárquico
+    try:
+        pos = nx.spring_layout(G, k=2, iterations=50)
+    except:
+        pos = {node: (i, 0) for i, node in enumerate(G.nodes())}
+    
+    # Criar traces para edges
+    edge_x = []
+    edge_y = []
+    
+    for edge in G.edges():
+        x0, y0 = pos[edge[0]]
+        x1, y1 = pos[edge[1]]
+        edge_x.extend([x0, x1, None])
+        edge_y.extend([y0, y1, None])
+    
+    edge_trace = go.Scatter(
+        x=edge_x, y=edge_y,
+        line=dict(width=2, color='#888'),
+        hoverinfo='none',
+        mode='lines'
+    )
+    
+    # Criar traces para nodes
+    node_x = []
+    node_y = []
+    node_text = []
+    node_color = []
+    
+    for node in G.nodes():
+        x, y = pos[node]
+        node_x.append(x)
+        node_y.append(y)
+        node_text.append(node)
+        
+        # Cor baseada no tipo
+        step = next(s for s in ktr_model.steps if s.name == node)
+        if step.is_input:
+            node_color.append('#667eea')
+        elif step.is_output:
+            node_color.append('#4facfe')
+        else:
+            node_color.append('#f093fb')
+    
+    node_trace = go.Scatter(
+        x=node_x, y=node_y,
+        mode='markers+text',
+        hoverinfo='text',
+        text=node_text,
+        textposition="middle center",
+        marker=dict(
+            size=50,
+            color=node_color,
+            line=dict(width=2, color='white')
+        )
+    )
+    
+    # Criar figura
+    fig = go.Figure(
+        data=[edge_trace, node_trace],
+        layout=go.Layout(
+            title=dict(text='Fluxo de Dados do Pipeline', font=dict(size=16)),
+            showlegend=False,
+            hovermode='closest',
+            margin=dict(b=20,l=5,r=5,t=40),
+            annotations=[ dict(
+                text="Direção do fluxo de dados",
+                showarrow=False,
+                xref="paper", yref="paper",
+                x=0.005, y=-0.002,
+                xanchor="left", yanchor="bottom",
+                font=dict(color="#000000", size=12)
+            )],
+            xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+            yaxis=dict(showgrid=False, zeroline=False, showticklabels=False)
+        )
+    )
+    
+    return fig
+
+
+def find_critical_paths(ktr_model):
+    """Encontra caminhos críticos no pipeline"""
+    try:
+        import networkx as nx
+    except ImportError:
+        return []
+    
+    G = nx.DiGraph()
+    
+    for step in ktr_model.steps:
+        G.add_node(step.name)
+    
+    for hop in ktr_model.hops:
+        if hop.enabled:
+            G.add_edge(hop.from_step, hop.to_step)
+    
+    # Encontrar todos os caminhos simples
+    start_nodes = [n for n in G.nodes() if G.in_degree(n) == 0]
+    end_nodes = [n for n in G.nodes() if G.out_degree(n) == 0]
+    
+    paths = []
+    for start in start_nodes:
+        for end in end_nodes:
+            try:
+                for path in nx.all_simple_paths(G, start, end):
+                    paths.append(path)
+            except:
+                pass
+    
+    return paths
+
+
+def find_bottlenecks(ktr_model):
+    """Identifica possíveis gargalos"""
+    bottlenecks = []
+    
+    for step in ktr_model.steps:
+        # Steps com múltiplas entradas podem ser gargalos
+        incoming = [hop for hop in ktr_model.hops if hop.to_step == step.name]
+        if len(incoming) > 1:
+            bottlenecks.append({
+                "step": step.name,
+                "reason": f"Recebe dados de {len(incoming)} fontes diferentes"
+            })
+        
+        # Steps de alta complexidade
+        if step.type.value in ["GroupBy", "SortRows"]:
+            bottlenecks.append({
+                "step": step.name,
+                "reason": f"Operação de alta complexidade: {step.type.value}"
+            })
+    
+    return bottlenecks
+
+
 def get_step_explanation(step) -> str:
-    """Gera explicação para uma etapa específica."""
-    explanations = {
-        "TableInput": "📊 Lê dados de uma tabela no banco de dados",
-        "TextFileInput": "📄 Lê dados de um arquivo de texto (CSV, TXT, etc.)",
-        "ExcelInput": "📈 Lê dados de um arquivo Excel",
-        "Select values": "🔧 Seleciona e renomeia campos específicos",
-        "Filter rows": "🔍 Filtra registros baseado em condições",
-        "Sort rows": "📊 Ordena registros por campos específicos",
-        "Group by": "📊 Agrupa dados e calcula estatísticas",
-        "Calculator": "🧮 Calcula novos campos usando expressões",
-        "String operations": "🔤 Manipula strings (concatenar, substituir, etc.)",
-        "StringOperations": "🔤 Manipula strings (concatenar, substituir, etc.)",
-        "Value Mapper": "🗺️ Mapeia valores de entrada para valores de saída",
-        "Database join": "🔗 Junta dados de múltiplas fontes",
-        "Database lookup": "🔍 Busca dados em outra tabela",
-        "TableOutput": "💾 Grava dados em uma tabela do banco de dados",
-        "TextFileOutput": "📄 Grava dados em arquivo de texto",
-        "ExcelOutput": "📈 Grava dados em arquivo Excel",
-        "Insert/Update": "🔄 Insere ou atualiza registros no banco",
-        "Delete": "🗑️ Remove registros do banco de dados",
-        "Abort": "⛔ Para a execução do pipeline se condições forem atendidas",
-        "Dummy": "🔄 Etapa de passagem (não faz processamento)",
+    """Gera explicação detalhada para uma etapa específica."""
+    
+    # Mapeamento detalhado de explicações por tipo
+    detailed_explanations = {
+        "TableInput": {
+            "description": "📊 **Entrada de Tabela SQL**",
+            "details": [
+                "• Extrai dados diretamente de tabelas no banco de dados",
+                "• Suporta queries SQL complexas com WHERE, JOIN, GROUP BY",
+                "• Permite controle de limite de registros para testes",
+                "• Otimizado para grandes volumes de dados",
+                "• Mantém tipos de dados originais (inteiros, decimais, datas)"
+            ],
+            "use_cases": [
+                "Extração de dados transacionais",
+                "Consultas a dimensões e fatos",
+                "Leitura de tabelas de configuração"
+            ],
+            "performance": "Alta - execução direta no banco",
+            "complexity": "Baixa a Média (dependendo da query)"
+        },
+        
+        "ExcelInput": {
+            "description": "📈 **Entrada de Arquivo Excel**",
+            "details": [
+                "• Lê dados de planilhas Excel (.xls, .xlsx)",
+                "• Suporta múltiplas abas/worksheets",
+                "• Detecta automaticamente cabeçalhos e tipos",
+                "• Permite definir range específico de células",
+                "• Converte datas e números automaticamente"
+            ],
+            "use_cases": [
+                "Importação de dados de usuários",
+                "Cargas mensais/semanais",
+                "Dados de sistemas legados"
+            ],
+            "performance": "Média - processamento de arquivo",
+            "complexity": "Baixa a Média"
+        },
+        
+        "TextFileInput": {
+            "description": "📄 **Entrada de Arquivo Texto**",
+            "details": [
+                "• Processa arquivos CSV, TXT, TSV delimitados",
+                "• Configuração flexível de separadores",
+                "• Tratamento de encoding (UTF-8, Latin1, etc.)",
+                "• Suporte a escape de caracteres especiais",
+                "• Validação de estrutura durante leitura"
+            ],
+            "use_cases": [
+                "Arquivos de sistemas externos",
+                "Exports de relatórios",
+                "Dados de APIs em formato texto"
+            ],
+            "performance": "Alta - leitura otimizada",
+            "complexity": "Baixa"
+        },
+        
+        "StringOperations": {
+            "description": "🔤 **Operações de String**",
+            "details": [
+                "• Manipulação avançada de campos de texto",
+                "• Concatenação, substring, replace, trim",
+                "• Conversão de case (maiúscula/minúscula)",
+                "• Remoção de caracteres especiais",
+                "• Formatação e padronização de dados"
+            ],
+            "use_cases": [
+                "Limpeza de dados de entrada",
+                "Formatação de códigos/IDs",
+                "Normalização de nomes e endereços"
+            ],
+            "performance": "Muito Alta - operações em memória",
+            "complexity": "Baixa a Média"
+        },
+        
+        "Calculator": {
+            "description": "🧮 **Calculadora de Campos**",
+            "details": [
+                "• Cria novos campos através de expressões",
+                "• Operações matemáticas (+, -, *, /, %)",
+                "• Funções de data (DATEDIFF, DATEADD, etc.)",
+                "• Condicionais (IF, CASE WHEN)",
+                "• Funções estatísticas (SUM, AVG, COUNT)"
+            ],
+            "use_cases": [
+                "Cálculo de indicadores",
+                "Transformações de medidas",
+                "Criação de flags e categorias"
+            ],
+            "performance": "Alta - cálculos otimizados",
+            "complexity": "Média a Alta"
+        },
+        
+        "FilterRows": {
+            "description": "🔍 **Filtro de Registros**",
+            "details": [
+                "• Filtragem baseada em condições lógicas",
+                "• Operadores: =, <>, >, <, >=, <=, LIKE",
+                "• Múltiplas condições com AND/OR",
+                "• Suporte a expressões regulares",
+                "• Filtros por valores nulos/não nulos"
+            ],
+            "use_cases": [
+                "Seleção de período específico",
+                "Filtro por status/categoria",
+                "Remoção de registros inválidos"
+            ],
+            "performance": "Muito Alta - filtro em memória",
+            "complexity": "Baixa"
+        },
+        
+        "SortRows": {
+            "description": "📊 **Ordenação de Registros**",
+            "details": [
+                "• Ordena registros por um ou múltiplos campos",
+                "• Suporte a ordenação crescente/decrescente",
+                "• Otimizado para grandes volumes",
+                "• Preserva ordem original em caso de empate",
+                "• Suporte a tipos diversos (texto, número, data)"
+            ],
+            "use_cases": [
+                "Preparação para agregações",
+                "Ordenação cronológica",
+                "Ranking de valores"
+            ],
+            "performance": "Média - uso intensivo de memória",
+            "complexity": "Média"
+        },
+        
+        "GroupBy": {
+            "description": "📋 **Agrupamento e Agregação**",
+            "details": [
+                "• Agrupa registros por campos específicos",
+                "• Funções: SUM, COUNT, AVG, MIN, MAX",
+                "• Múltiplos níveis de agrupamento",
+                "• Criação de subtotais automáticos",
+                "• Otimizado para análises estatísticas"
+            ],
+            "use_cases": [
+                "Relatórios de totalizações",
+                "Análises por período/categoria",
+                "Cálculo de KPIs"
+            ],
+            "performance": "Baixa a Média - processamento intensivo",
+            "complexity": "Alta"
+        },
+        
+        "SelectValues": {
+            "description": "✅ **Seleção de Campos**",
+            "details": [
+                "• Seleciona campos específicos do dataset",
+                "• Renomeação de colunas",
+                "• Alteração de tipos de dados",
+                "• Reordenação de campos",
+                "• Remoção de colunas desnecessárias"
+            ],
+            "use_cases": [
+                "Preparação de estrutura final",
+                "Otimização de performance",
+                "Padronização de nomenclatura"
+            ],
+            "performance": "Muito Alta - operação simples",
+            "complexity": "Baixa"
+        },
+        
+        "TableOutput": {
+            "description": "💾 **Saída para Tabela SQL**",
+            "details": [
+                "• Grava dados em tabelas do banco",
+                "• Modos: INSERT, UPDATE, INSERT/UPDATE",
+                "• Controle de commit por lotes",
+                "• Mapeamento automático de campos",
+                "• Tratamento de chaves primárias/únicas"
+            ],
+            "use_cases": [
+                "Carga em Data Warehouse",
+                "Atualização de dimensões",
+                "Persistência de resultados"
+            ],
+            "performance": "Média - depende da rede/banco",
+            "complexity": "Baixa a Média"
+        },
+        
+        "ExcelOutput": {
+            "description": "📊 **Saída para Excel**",
+            "details": [
+                "• Cria arquivos Excel (.xlsx) com dados",
+                "• Múltiplas abas em um arquivo",
+                "• Formatação automática (headers, tipos)",
+                "• Controle de localização do arquivo",
+                "• Preservação de formatação original"
+            ],
+            "use_cases": [
+                "Relatórios para usuários finais",
+                "Exports para análise externa",
+                "Backup de dados processados"
+            ],
+            "performance": "Baixa - criação de arquivo",
+            "complexity": "Baixa"
+        },
+        
+        "TextFileOutput": {
+            "description": "📁 **Saída para Arquivo Texto**",
+            "details": [
+                "• Gera arquivos CSV, TXT delimitados",
+                "• Configuração de separadores e encoding",
+                "• Controle de cabeçalhos",
+                "• Formatação de datas e números",
+                "• Otimizado para integração com outros sistemas"
+            ],
+            "use_cases": [
+                "Interface com sistemas externos",
+                "Arquivos para FTP/API",
+                "Backup em formato universal"
+            ],
+            "performance": "Alta - escrita sequencial",
+            "complexity": "Baixa"
+        },
+        
+        "ValueMapper": {
+            "description": "🗺️ **Mapeamento de Valores**",
+            "details": [
+                "• Substitui valores baseado em tabela de mapeamento",
+                "• Suporte a valores padrão para não encontrados",
+                "• Mapeamento um-para-um ou um-para-muitos",
+                "• Útil para tradução de códigos",
+                "• Preserva tipos de dados originais"
+            ],
+            "use_cases": [
+                "Tradução de códigos",
+                "Padronização de valores",
+                "Enriquecimento de dados"
+            ],
+            "performance": "Alta - lookup em memória",
+            "complexity": "Média"
+        }
     }
     
     step_type = step.type.value if hasattr(step.type, 'value') else str(step.type)
-    base_explanation = explanations.get(step_type, f"⚙️ Executa operação: {step_type}")
     
-    # Adicionar informações específicas se disponíveis
-    additional_info = []
-    
-    # Verificar se há configurações específicas
-    if hasattr(step, 'configuration') and step.configuration:
-        config = step.configuration
+    if step_type in detailed_explanations:
+        info = detailed_explanations[step_type]
         
-        # Para inputs de arquivo
-        if 'filename' in config:
-            additional_info.append(f"Arquivo: {config['filename']}")
-        
-        # Para operações de banco
-        if 'table' in config:
-            additional_info.append(f"Tabela: {config['table']}")
-        
-        # Para filtros
-        if 'condition' in config:
-            additional_info.append(f"Condição: {config['condition']}")
+        explanation = f"""
+{info['description']}
+
+**📋 Funcionalidades:**
+{chr(10).join(info['details'])}
+
+**🎯 Casos de Uso Típicos:**
+{chr(10).join(['• ' + uc for uc in info['use_cases']])}
+
+**⚡ Performance:** {info['performance']}
+**🔧 Complexidade:** {info['complexity']}
+"""
+    else:
+        # Fallback para tipos não mapeados
+        explanation = f"⚙️ **{step_type}**\n\nExecuta operação específica: {step_type}"
     
-    if additional_info:
-        base_explanation += f" ({', '.join(additional_info)})"
+    # Adicionar informações específicas da configuração se disponíveis
+    config_info = []
     
-    return base_explanation
+    if hasattr(step, 'config') and step.config:
+        config = step.config
+        
+        # Informações específicas por tipo
+        if step_type == "TableInput":
+            if 'connection' in config:
+                config_info.append(f"🔗 **Conexão:** {config['connection']}")
+            if 'sql' in config:
+                sql_preview = config['sql'][:100] + "..." if len(config['sql']) > 100 else config['sql']
+                config_info.append(f"📝 **Query:** `{sql_preview}`")
+            if 'limit' in config and config['limit'] > 0:
+                config_info.append(f"📊 **Limite:** {config['limit']} registros")
+                
+        elif step_type == "ExcelInput":
+            if 'filename' in config:
+                config_info.append(f"📁 **Arquivo:** {config['filename']}")
+            if 'sheet' in config:
+                config_info.append(f"📄 **Planilha:** {config['sheet']}")
+            if 'startrow' in config:
+                config_info.append(f"📍 **Linha inicial:** {config['startrow']}")
+                
+        elif step_type == "TableOutput":
+            if 'connection' in config:
+                config_info.append(f"🔗 **Conexão:** {config['connection']}")
+            if 'table' in config:
+                config_info.append(f"📋 **Tabela:** {config['table']}")
+            if 'commit' in config:
+                config_info.append(f"📦 **Commit:** {config['commit']} registros")
+    
+    # Adicionar configurações específicas se encontradas
+    if config_info:
+        explanation += f"\n\n**⚙️ Configuração Atual:**\n{chr(10).join(config_info)}"
+    
+    return explanation
 
 
 
